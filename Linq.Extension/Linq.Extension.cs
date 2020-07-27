@@ -1,0 +1,672 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Linq.Expressions;
+using System.Reflection;
+using System.Reflection.Emit;
+using System.Threading;
+using Linq.Extension.Filter;
+using Linq.Extension.Pagination;
+using MoreLinq.Extensions;
+using System.Text.RegularExpressions;
+using Newtonsoft.Json;
+
+namespace Linq.Extension
+{
+    public static class LinqDynamicExtension
+    {
+        public static Expression<Func<TSource, T>> DynamicSelectGenerator<TSource, T>(string Fields = "")
+        {
+            string[] EntityFields;
+            if (Fields == "")
+                // get Properties of the T
+                EntityFields = typeof(T).GetProperties().Select(propertyInfo => propertyInfo.Name).ToArray();
+            else
+                EntityFields = Fields.Split(',');
+
+            // input parameter "o"
+            var xParameter = Expression.Parameter(typeof(TSource), "o");
+
+            // new statement "new Data()"
+            var xNew = Expression.New(typeof(T));
+
+            // create initializers
+            var bindings = EntityFields.Select(o => o.Trim())
+                .Select(o =>
+                {
+
+                    // property "Field1"
+                    var mi = typeof(T).GetProperty(o);
+
+                    // original value "o.Field1"
+                    var xOriginal = Expression.Property(xParameter, mi);
+
+                    // set value "Field1 = o.Field1"
+                    return Expression.Bind(mi, xOriginal);
+                }
+            );
+
+            // initialization "new Data { Field1 = o.Field1, Field2 = o.Field2 }"
+            var xInit = Expression.MemberInit(xNew, bindings);
+
+            // expression "o => new Data { Field1 = o.Field1, Field2 = o.Field2 }"
+            var lambda = Expression.Lambda<Func<TSource, T>>(xInit, xParameter);
+
+            // compile to Func<Data, Data>
+            return lambda;
+        }
+
+        public static IQueryable SelectDynamic(this IQueryable source, IEnumerable<string> fieldNames)
+        {
+            Dictionary<string, PropertyInfo> sourceProperties = fieldNames.ToDictionary(name => name, name => source.ElementType.GetProperty(name));
+            Type dynamicType = LinqRuntimeTypeBuilder.GetDynamicType(sourceProperties.Values);
+
+            ParameterExpression sourceItem = Expression.Parameter(source.ElementType, "t");
+            IEnumerable<MemberBinding> bindings = dynamicType.GetFields().Select(p => Expression.Bind(p, Expression.Property(sourceItem, sourceProperties[p.Name]))).OfType<MemberBinding>();
+
+            Expression selector = Expression.Lambda(Expression.MemberInit(
+                Expression.New(dynamicType.GetConstructor(Type.EmptyTypes)), bindings), sourceItem);
+
+            return source.Provider.CreateQuery(Expression.Call(typeof(Queryable), "Select", new Type[] { source.ElementType, dynamicType },
+                         Expression.Constant(source), selector));
+        }
+        private static Type GetUnderlyingType(this Type source)
+        {
+            if (source.IsGenericType)
+                return Nullable.GetUnderlyingType(source);
+            else
+                return source;
+        }
+        public static Expression<Func<T, bool>> WherePredicateBasedOnRelationalIds<T, E>(Dictionary<string, object> parameters
+            , IEnumerable<E> Ids, string IdFieldName)
+        {
+            //the 'IN' parameter for expression ie T=> condition
+            ParameterExpression pe = Expression.Parameter(typeof(T), "o");
+
+            //combine them with and 1=1 Like no expression
+            Expression combined = null;
+
+            MethodInfo method = null;
+            if (Ids != null && !string.IsNullOrEmpty(IdFieldName))
+            {
+                Ids = Ids.ToList();
+                method = Ids.GetType().GetMethod("Contains");
+                combined = Expression.Call(Expression.Constant(Ids), method, Expression.Property(pe, IdFieldName));
+                var filterExpr = GetDynamicWherePredicate<T>(parameters, pe);
+                if (filterExpr != null)
+                    combined = GetCombinedExpression(combined, filterExpr);
+            }
+            if (combined == null)
+            {
+                combined = Expression.Constant(true);
+            }
+            return Expression.Lambda<Func<T, bool>>(combined, new ParameterExpression[] { pe });
+        }
+        private static Expression GetDynamicWherePredicate<T>(IDictionary<string, object> parameters, ParameterExpression pe)
+        {
+            //combine them with and 1=1 Like no expression
+            Expression combined = null;
+
+            MethodInfo method = null;
+
+            if (parameters != null && parameters.Keys != null && parameters.Keys.Count > 0)
+            {
+                SearchInput searchInput = null;
+                Dictionary<string, PropertyInfo> sourceProperties = null;
+                Expression columnValue = null;
+                Expression columnNameProperty = null;
+                Expression e1 = null;
+                object value = null;
+
+                foreach (var key in parameters.Keys)
+                {
+                    if (key == "search")
+                    {
+                        searchInput = JsonConvert.DeserializeObject<SearchInput>(JsonConvert.SerializeObject(parameters[key]));
+                        //searchInput = parameters[key].GetPropertyValue<SearchInput>();
+                        //context.GetArgument<SearchInput>(key);
+
+                        if (searchInput != null)
+                        {
+                            sourceProperties = searchInput.Filters
+                                .DistinctBy(x => x.FieldName)
+                            .ToDictionary(filter => filter.FieldName,
+                                filter => typeof(T).GetProperty(ToTitleCase(filter.FieldName)));
+                            if (sourceProperties == null || sourceProperties.Count == 0)
+                                throw new Exception
+                                    ($"Filters can't be empty. Either provide filters or remove 'search' argument");// on type {context.ReturnType.GetType().GenericTypeArguments[0].Name}");
+                            var nullProps = sourceProperties.Where(x => x.Value == null).FirstOrDefault();
+                            if (!nullProps.Equals(default(KeyValuePair<string, PropertyInfo>)))
+                                throw new Exception
+                                    ($"Invalid Filter: filed name '{nullProps.Key}' doesn't exists ");//in the type {context.ReturnType.GetType().GenericTypeArguments[0].Name}.");
+
+                        }
+                    }
+                    else if (key != "pagination")
+                    {
+                        value = parameters[key];
+                        var property = typeof(T).GetProperty(ToTitleCase(key));
+                        if (property != null)
+                        {
+                            columnNameProperty = Expression.Property(pe, property.Name);
+                            columnValue = GetConstantColumnValueExpression(value, property.PropertyType);
+                            e1 = Expression.Equal(columnNameProperty, columnValue);
+                            combined = GetCombinedExpression(combined, e1, null);
+                        }
+                    }
+
+                    if (searchInput != null && searchInput.Filters != null && searchInput.Filters.Count > 0)
+                    {
+                        foreach (FilterInput filterInput in searchInput.Filters)
+                        {
+                            if (filterInput != null)
+                            {
+                                columnNameProperty = Expression.Property(pe, sourceProperties[filterInput.FieldName].Name);
+                                value = filterInput.Value;
+                                //columnValue = GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType);
+                                switch (filterInput.Operation)
+                                {
+                                    case FilterOperationEnum.gt:
+                                        e1 = Expression.GreaterThan(columnNameProperty,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                        break;
+                                    case FilterOperationEnum.gte:
+                                        e1 = Expression.GreaterThanOrEqual(columnNameProperty,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                        break;
+                                    case FilterOperationEnum.lt:
+                                        e1 = Expression.LessThan(columnNameProperty,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                        break;
+                                    case FilterOperationEnum.lte:
+                                        e1 = Expression.LessThanOrEqual(columnNameProperty,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                        break;
+                                    case FilterOperationEnum.neq:
+                                        e1 = Expression.NotEqual(columnNameProperty,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                        break;
+                                    case FilterOperationEnum.contains:
+                                        method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("Contains");
+                                        e1 = Expression.Call(columnNameProperty, method,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                        break;
+                                    case FilterOperationEnum.notcontains:
+                                        method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("Contains");
+                                        e1 = Expression.Not(Expression.Call(columnNameProperty, method,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType)));
+                                        break;
+                                    case FilterOperationEnum.startswith:
+                                        method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("StartsWith"
+                                            , new Type[] { typeof(string) });
+                                        e1 = Expression.Call(columnNameProperty, method,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                        break;
+                                    case FilterOperationEnum.endswith:
+                                        method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("EndsWith"
+                                            , new Type[] { typeof(string) });
+                                        e1 = Expression.Call(columnNameProperty, method,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                        break;
+                                    case FilterOperationEnum.inlist:
+                                        string strValue = Convert.ToString(value);
+                                        if (!string.IsNullOrEmpty(strValue))
+                                        {
+                                            var inList = GetListForInOperationFromValue(strValue,
+                                                sourceProperties[filterInput.FieldName], pe, out method, out Expression propExpression);
+                                            if (inList != null && method != null)
+                                                e1 = Expression.Call(Expression.Constant(inList), method, propExpression);
+                                        }
+                                        break;
+                                    case FilterOperationEnum.notinlist:
+                                        string strValue2 = Convert.ToString(value);
+                                        if (!string.IsNullOrEmpty(strValue2))
+                                        {
+                                            var inList = GetListForInOperationFromValue(strValue2,
+                                                sourceProperties[filterInput.FieldName], pe, out method, out Expression propExpression);
+                                            if (inList != null && method != null)
+                                                e1 = Expression.Not(
+                                                    Expression.Call(Expression.Constant(inList), method, propExpression));
+                                        }
+                                        break;
+                                    default:
+                                        e1 = Expression.Equal(columnNameProperty,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                        break;
+                                }
+                                combined = GetCombinedExpression(combined, e1, filterInput);
+                            }
+                        }
+                    }
+                }
+            }
+            return combined;
+        }
+        public static Expression<Func<T, bool>> DynamicWherePredicate<T>(IDictionary<string, object> parameters)
+        {
+            //the 'IN' parameter for expression ie T=> condition
+            ParameterExpression pe = Expression.Parameter(typeof(T), "o");
+            Expression combined = GetDynamicWherePredicate<T>(parameters, pe);
+            if (combined == null)
+            {
+                combined = Expression.Constant(true);
+            }
+
+            //create and return the predicate
+            return Expression.Lambda<Func<T, bool>>(combined, new ParameterExpression[] { pe });
+        }
+        private static object GetListForInOperationFromValue(string value, PropertyInfo propertyInfo, ParameterExpression pe
+            , out MethodInfo method
+            , out Expression propertyExpression)
+        {
+            object l = null;
+            method = null;
+            Type t = propertyInfo.PropertyType.GetUnderlyingType();
+
+            var genericType = typeof(List<>).MakeGenericType(t);
+            var instance = Activator.CreateInstance(genericType);
+            method = instance.GetType().GetMethod("Contains");
+
+            if (t.FullName.ToLower().Contains("int64"))
+            {
+                l = value.Split(',').Select(Int64.Parse).ToList();
+
+            }
+            else if (t.FullName.ToLower().Contains("int"))
+            {
+                l = value.Split(',').Select(int.Parse).ToList();
+
+            }
+            else if (t.FullName.ToLower().Contains("bool"))
+            {
+                l = value.Split(',').Select(bool.Parse).ToList();
+            }
+            else if (t.FullName.ToLower().Contains("string"))
+            {
+                l = value.Split(',').ToList();
+            }
+            else if (t.FullName.ToLower().Contains("date"))
+            {
+                l = value.Split(',').Select(DateTime.Parse).ToList();
+            }
+
+            if (propertyInfo.PropertyType.FullName.ToLower().Contains("nullable"))
+                propertyExpression =
+                    propertyExpression = Expression.Convert(Expression.Property(pe, propertyInfo.Name), t);
+            else
+                propertyExpression = Expression.Property(pe, propertyInfo.Name);
+
+            return l;
+        }
+        private static ConstantExpression GetConstantColumnValueExpression(object value, Type propertyType)
+        {
+            ConstantExpression columnValue = null;
+            if (value != null)
+            {
+                if (propertyType.FullName.ToLower().Contains("int"))
+                {
+                    columnValue = Expression.Constant(Convert.ToInt32(value), propertyType);
+                }
+                else if (propertyType.FullName.ToLower().Contains("bool"))
+                {
+                    columnValue = Expression.Constant(Convert.ToBoolean(value), propertyType);
+                }
+                else if (propertyType.FullName.ToLower().Contains("string"))
+                {
+                    columnValue = Expression.Constant(Convert.ToString(value), propertyType);
+                }
+                else if (propertyType.FullName.ToLower().Contains("datetime"))
+                {
+                    columnValue = Expression.Constant(Convert.ToDateTime(value), propertyType);
+                }
+                else if (propertyType.FullName.ToLower().Contains("date"))
+                {
+                    columnValue = Expression.Constant(Convert.ToDateTime(value).Date, propertyType);
+                }
+            }
+            else
+                columnValue = Expression.Constant(value);
+            return columnValue;
+        }
+
+        private static Expression GetCombinedExpression(Expression first, Expression second, FilterInput filterInput = null)
+        {
+            if (first == null)
+            {
+                first = Expression.Constant(true);
+            }
+            if (second == null)
+                second = Expression.Constant(true);
+            if (first != null && second != null)
+            {
+                if (filterInput != null)
+                {
+                    switch (filterInput.Logic)
+                    {
+                        case FilterLogicEnum.or:
+                            first = Expression.Or(first, second);
+                            break;
+                        default:
+                            first = Expression.And(first, second);
+                            break;
+                    }
+                }
+                else
+                    first = Expression.And(first, second);
+            }
+
+            return first;
+        }
+        private static PropertyInfo GetScalarPropertyByNameStartsWith(this Type type, string name)
+        {
+            var properties = type.GetProperties()
+                .Where(p => p.Name.StartsWith(name) && p.PropertyType.FullName.Contains("System")
+                    && !p.PropertyType.FullName.Contains("Generic")
+                );
+
+            if (properties != null && properties.Count() > 0)
+                return properties.ToList()[0];
+            else
+                return null;
+        }
+        private static PropertyInfo GetScalarPropertyByFullNameOrStartsWith(this Type type, string name)
+        {
+            Regex exprFullMacth = new Regex("^" + name + "$", RegexOptions.IgnoreCase);
+            Regex exprStartsWith = new Regex("^" + name + ".*$", RegexOptions.IgnoreCase);
+            var properties = type.GetProperties()
+                .Where(p => exprFullMacth.IsMatch(p.Name) ||
+                (exprStartsWith.IsMatch(p.Name) && p.PropertyType.FullName.Contains("System")
+                    && !p.PropertyType.FullName.Contains("Generic")
+                ));
+
+            if (properties != null && properties.Count() > 0)
+                return properties.ToList()[0];
+            else
+                return null;
+        }
+        public static Expression<Func<T, dynamic>> DynamicSelectGeneratorAnomouysType<T>(IEnumerable<string> fieldsNames)
+        {
+            var sourceProperties = GetSelectionSetAsDictionaryOfProperties<T>(fieldsNames);
+
+            Type dynamicType = LinqRuntimeTypeBuilder.GetDynamicType(sourceProperties.Values);
+
+            ParameterExpression sourceItem = Expression.Parameter(typeof(T), "t");
+            IEnumerable<MemberBinding> bindings = dynamicType.GetFields().Select(p => Expression.Bind(p, Expression.Property(sourceItem, sourceProperties[p.Name]))).OfType<MemberBinding>();
+
+            var selector = Expression.Lambda<Func<T, dynamic>>(Expression.MemberInit(
+                Expression.New(dynamicType.GetConstructor(Type.EmptyTypes)), bindings)
+                , sourceItem);
+
+            return selector;
+        }
+        public static object ToNonAnonymousList<T>(this List<T> list, Type t)
+        {
+
+            //define system Type representing List of objects of T type:
+            var genericType = typeof(List<>).MakeGenericType(t);
+
+            //create an object instance of defined type:
+            var l = Activator.CreateInstance(genericType);
+
+            //get method Add from from the list:
+            MethodInfo addMethod = l.GetType().GetMethod("Add");
+
+            //loop through the calling list:
+            foreach (T item in list)
+            {
+
+                //convert each object of the list into T object 
+                //by calling extension ToType<T>()
+                //Add this object to newly created list:
+                addMethod.Invoke(l, new object[] { item.ToType(t, t.Assembly.GetName().Name) });
+            }
+
+            //return List of T objects:
+            return l;
+        }
+
+        private static object ToType<T>(this object obj, T type, string assemblyName)
+        {
+
+            //create instance of T type object:
+            var tmp = Activator.CreateInstance(Type.GetType(type.ToString() + "," + assemblyName));
+
+            //loop through the properties of the object you want to covert:          
+            foreach (var pi in obj.GetType().GetFields())
+            {
+                try
+                {
+
+                    //get the value of property and try 
+                    //to assign it to the property of T type object:
+                    tmp.GetType().GetProperty(pi.Name).SetValue(tmp,
+                                              pi.GetValue(obj), null);
+                }
+                catch { }
+            }
+
+            //return the T type object:         
+            return tmp;
+        }
+
+        public static string ToTitleCase(string value)
+        {
+            string strTitleCase = "";
+            strTitleCase = value.Substring(0, 1).ToUpper() + value.Substring(1);
+
+            return strTitleCase;
+        }
+
+        public static Dictionary<string, PropertyInfo> GetSelectionSetAsDictionaryOfProperties<T>(IEnumerable<string> fieldNames)
+        {
+            Dictionary<string, PropertyInfo> selectStatement = new Dictionary<string, PropertyInfo>();
+            PropertyInfo property = null;
+            foreach (var field in fieldNames)
+            {
+                property = typeof(T).GetScalarPropertyByFullNameOrStartsWith(field);
+                if (property != null)
+                    selectStatement.Add(property.Name, property);
+            }
+
+
+            return selectStatement;
+        }
+
+        //////////***********************////////////
+        ///
+        private static Expression<Func<T, R>> GetSortExpression<T, R>(string propertyName)//, R propType) //where R : Type
+        {
+            //the 'IN' parameter for expression ie T=> condition
+            ParameterExpression pe = Expression.Parameter(typeof(T), "o");
+
+            var exprSort = Expression.Property(pe, propertyName);
+            return Expression.Lambda<Func<T, R>>(exprSort, new ParameterExpression[] { pe });
+        }
+        public static IQueryable<T> SortBy<T>(this IQueryable<T> source, List<SortInput> sorts)
+        {
+            if (sorts != null && sorts.Count > 0)
+            {
+                MethodInfo method;
+                SortInput sort = null;
+                string prefix = "Order";
+                Expression exprNext = null;
+                PropertyInfo property = null;
+                Type propertyType = null;
+                MethodInfo methodSortExpr = null;
+                for (int i = 0; i < sorts.Count; i++)
+                {
+                    prefix = i < 1 ? "Order" : "Then";
+                    sort = sorts[i];
+                    property = typeof(T).GetProperty(ToTitleCase(sort.FieldName));
+                    if (property.PropertyType.IsGenericType)
+                        propertyType = Nullable.GetUnderlyingType(property.PropertyType);
+                    else
+                        propertyType = property.PropertyType;
+                    if (!string.IsNullOrEmpty(sort.FieldName))
+                    {
+
+                        switch (sort.Direction)
+                        {
+                            case SortDirectionEnum.desc:
+                                method = typeof(Queryable).GetMethods()
+                                .Where(x => x.Name == prefix + "ByDescending")
+                                .First().MakeGenericMethod(typeof(T), propertyType);
+                                break;
+                            default:
+                                method = typeof(Queryable).GetMethods()
+                                .Where(x => x.Name == prefix + "By")
+                                .First().MakeGenericMethod(typeof(T), propertyType);
+                                break;
+                        }
+                        if (i == 0)
+                        {
+                            exprNext = source.Expression;
+                        }
+
+                        if (property != null)
+                        {
+                            methodSortExpr = typeof(LinqDynamicExtension)
+                                .GetMethod("GetSortExpression", BindingFlags.NonPublic | BindingFlags.Static)
+                                .MakeGenericMethod(typeof(T), propertyType);
+                            exprNext = Expression.Call(
+                                        null,
+                                        method,
+                                        exprNext,
+                                        (Expression)methodSortExpr.Invoke(null, new string[] { sort.FieldName }));
+                        }
+                    }
+                }
+                return source.Provider.CreateQuery<T>(exprNext);
+            }
+            else
+                return source;
+        }
+        public static IQueryable<T> TakeIfPositiveNumber<T>(this IQueryable<T> source, int? count)
+        {
+            if (count.HasValue && count.Value > 0)
+            {
+                var method = typeof(Queryable).GetMethods()
+                    .Where(x => x.Name == "Take")
+                    .First().MakeGenericMethod(typeof(T));
+
+                return source.Provider.CreateQuery<T>(
+                Expression.Call(
+                    null,
+                    method,
+                    source.Expression,
+                    Expression.Constant(count))
+                    );
+            }
+            else
+                return source;
+        }
+        public static IQueryable<T> SkipIfPositiveNumber<T>(this IQueryable<T> source, int? count)
+        {
+            if (count.HasValue && count.Value > 0)
+            {
+                var method = typeof(Queryable).GetMethods()
+                    .Where(x => x.Name == "Skip")
+                    .First().MakeGenericMethod(typeof(T));
+
+                return source.Provider.CreateQuery<T>(
+                Expression.Call(
+                    null,
+                    method,
+                    source.Expression,
+                    Expression.Constant(count))
+                    );
+            }
+            else
+                return source;
+        }
+
+        public static IQueryable<T> Pagination<T>(this IQueryable<T> source, IDictionary<string, object> parameters)
+        {
+            PaginationInput pagingState = null;
+            if (parameters != null && parameters.ContainsKey("pagination"))
+            {
+                pagingState = JsonConvert.DeserializeObject<PaginationInput>(JsonConvert.SerializeObject(parameters["pagination"]));
+                //pagingState = parameters["pagination"].GetPropertyValue<PaginationInput>();
+            }
+            if (pagingState == null)
+                return source;
+            else
+            {
+                return source
+                    .SortBy(pagingState.Sorts)
+                    .SkipIfPositiveNumber(pagingState.Skip)
+                    .TakeIfPositiveNumber(pagingState.Take);
+            }
+        }
+
+        public static class LinqRuntimeTypeBuilder
+        {
+            //private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
+            private static AssemblyName assemblyName = new AssemblyName() { Name = "DynamicLinqTypes" };
+            private static ModuleBuilder moduleBuilder = null;
+            private static Dictionary<string, Type> builtTypes = new Dictionary<string, Type>();
+
+            //static LinqRuntimeTypeBuilder()
+            //{
+            //    moduleBuilder = Thread.GetDomain().DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.Run).DefineDynamicModule(assemblyName.Name);
+            //}
+
+            private static string GetTypeKey(Dictionary<string, Type> fields)
+            {
+                //TODO: optimize the type caching -- if fields are simply reordered, that doesn't mean that they're actually different types, so this needs to be smarter
+                string key = string.Empty;
+                foreach (var field in fields)
+                    key += field.Key + ";" + field.Value.Name + ";";
+
+                return key;
+            }
+
+            public static Type GetDynamicType(Dictionary<string, Type> fields)
+            {
+                if (null == fields)
+                    throw new ArgumentNullException("fields");
+                if (0 == fields.Count)
+                    throw new ArgumentOutOfRangeException("fields", "fields must have at least 1 field definition");
+
+                try
+                {
+                    Monitor.Enter(builtTypes);
+                    string className = GetTypeKey(fields);
+
+                    if (builtTypes.ContainsKey(className))
+                        return builtTypes[className];
+
+                    TypeBuilder typeBuilder = moduleBuilder.DefineType(className, TypeAttributes.Public | TypeAttributes.Class | TypeAttributes.Serializable);
+
+                    foreach (var field in fields)
+                        typeBuilder.DefineField(field.Key, field.Value, FieldAttributes.Public);
+
+                    builtTypes[className] = typeBuilder.CreateType();
+
+                    return builtTypes[className];
+                }
+                catch (Exception ex)
+                {
+                    //log.Error(ex);
+                }
+                finally
+                {
+                    Monitor.Exit(builtTypes);
+                }
+
+                return null;
+            }
+
+
+            private static string GetTypeKey(IEnumerable<PropertyInfo> fields)
+            {
+                return GetTypeKey(fields.ToDictionary(f => f.Name, f => f.PropertyType));
+            }
+
+            public static Type GetDynamicType(IEnumerable<PropertyInfo> fields)
+            {
+                return GetDynamicType(fields.ToDictionary(f => f.Name, f => f.PropertyType));
+            }
+        }
+    }
+}

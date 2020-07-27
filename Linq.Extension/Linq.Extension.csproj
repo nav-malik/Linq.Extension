@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks> netcoreapp2.1; netcoreapp3.1; net45; net451; net452; net462; net472</TargetFrameworks>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Authors>Nav Malik</Authors>
+    <Copyright>Nav Malik</Copyright>
+    <Description>Linq Extension to provide Dynamic Where Condition and Dynamic Select.</Description>
+    <PackageTags>Linq Extension DynamicSelect DynamicWhere</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="morelinq" Version="3.3.2" />
+    <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
+  </ItemGroup>
+
+</Project>
+	
