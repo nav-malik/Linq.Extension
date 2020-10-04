@@ -10,6 +10,7 @@ using Linq.Extension.Pagination;
 using MoreLinq.Extensions;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Linq.Extension
 {
@@ -77,7 +78,7 @@ namespace Linq.Extension
             else
                 return source;
         }
-        public static Expression<Func<T, bool>> WherePredicateBasedOnRelationalIds<T, E>(Dictionary<string, object> parameters
+        public static Expression<Func<T, bool>> WherePredicateWithRelationalIds<T, E>(IDictionary<string, object> parameters
             , IEnumerable<E> Ids, string IdFieldName)
         {
             //the 'IN' parameter for expression ie T=> condition
@@ -369,24 +370,75 @@ namespace Linq.Extension
             else
                 return null;
         }
-        private static PropertyInfo GetScalarPropertyByFullNameOrStartsWith(this Type type, string name)
+        private static List<PropertyInfo> GetScalarPropertyByFullNameOrStartsWith(this Type type, string name,
+            bool fetchParentEntityAlongWithParentlId = false)
         {
             Regex exprFullMacth = new Regex("^" + name + "$", RegexOptions.IgnoreCase);
             Regex exprStartsWith = new Regex("^" + name + ".*$", RegexOptions.IgnoreCase);
             var properties = type.GetProperties()
-                .Where(p => exprFullMacth.IsMatch(p.Name) ||
-                (exprStartsWith.IsMatch(p.Name) && p.PropertyType.FullName.Contains("System")
-                    && !p.PropertyType.FullName.Contains("Generic")
-                ));
+                .Where(p => exprFullMacth.IsMatch(p.Name)
+                && p.PropertyType.FullName.Contains("System")
+                        && !p.PropertyType.FullName.Contains("Generic")
+                );
+            if (properties == null || properties.Count() < 1)
+            {
+                var fkAttribute = type.GetProperties()
+                    .Where(p => exprFullMacth.IsMatch(p.Name) && p.GetCustomAttribute<ForeignKeyAttribute>() != null)
+                    .Select(f => f.GetCustomAttribute<ForeignKeyAttribute>())
+                    .FirstOrDefault();
+                if (fkAttribute != null)
+                {
+                    if (fetchParentEntityAlongWithParentlId)
+                        properties = type.GetProperties()
+                            .Where(p => !p.PropertyType.FullName.Contains("Generic") &&
+                            (exprFullMacth.IsMatch(p.Name) || fkAttribute.Name.ToLower() == p.Name.ToLower()));
+                    else
+                        properties = type.GetProperties()
+                            .Where(p => fkAttribute.Name.ToLower() == p.Name.ToLower());
 
+                }
+                else
+                {
+                    if (fetchParentEntityAlongWithParentlId)
+                        properties = type.GetProperties()
+                            .Where(p => !p.PropertyType.FullName.Contains("Generic") &&
+                            exprStartsWith.IsMatch(p.Name));
+                    else
+                        properties = type.GetProperties()
+                            .Where(p =>
+                            exprStartsWith.IsMatch(p.Name) && p.PropertyType.FullName.Contains("System")
+                                && !p.PropertyType.FullName.Contains("Generic"));
+                }
+            }
             if (properties != null && properties.Count() > 0)
-                return properties.ToList()[0];
+                return properties.ToList();
             else
                 return null;
         }
-        public static Expression<Func<T, dynamic>> DynamicSelectGeneratorAnomouysType<T>(IEnumerable<string> fieldsNames)
+
+        public static Dictionary<string, PropertyInfo> GetSelectionSetAsDictionaryOfProperties<T>(IEnumerable<string> fieldNames,
+            bool fetchParentEntityAlongWithParentlId = false)
         {
-            var sourceProperties = GetSelectionSetAsDictionaryOfProperties<T>(fieldsNames);
+            Dictionary<string, PropertyInfo> selectStatement = new Dictionary<string, PropertyInfo>();
+            //PropertyInfo property = null;
+            foreach (var field in fieldNames)
+            {
+                var properties = typeof(T).GetScalarPropertyByFullNameOrStartsWith(field, fetchParentEntityAlongWithParentlId);
+                if (properties != null)
+                {
+                    foreach (var property in properties)
+                        if (property != null && !selectStatement.Keys.Contains(property.Name))
+                            selectStatement.Add(property.Name, property);
+                }
+            }
+
+
+            return selectStatement;
+        }
+        public static Expression<Func<T, dynamic>> DynamicSelectGeneratorAnomouysType<T>(IEnumerable<string> fieldsNames,
+            bool fetchParentEntityAlongWithParentlId = false)
+        {
+            var sourceProperties = GetSelectionSetAsDictionaryOfProperties<T>(fieldsNames, fetchParentEntityAlongWithParentlId);
 
             Type dynamicType = LinqRuntimeTypeBuilder.GetDynamicType(sourceProperties.Values);
 
@@ -455,21 +507,6 @@ namespace Linq.Extension
             strTitleCase = value.Substring(0, 1).ToUpper() + value.Substring(1);
 
             return strTitleCase;
-        }
-
-        public static Dictionary<string, PropertyInfo> GetSelectionSetAsDictionaryOfProperties<T>(IEnumerable<string> fieldNames)
-        {
-            Dictionary<string, PropertyInfo> selectStatement = new Dictionary<string, PropertyInfo>();
-            PropertyInfo property = null;
-            foreach (var field in fieldNames)
-            {
-                property = typeof(T).GetScalarPropertyByFullNameOrStartsWith(field);
-                if (property != null)
-                    selectStatement.Add(property.Name, property);
-            }
-
-
-            return selectStatement;
         }
 
         //////////***********************////////////
@@ -606,10 +643,11 @@ namespace Linq.Extension
             private static ModuleBuilder moduleBuilder = null;
             private static Dictionary<string, Type> builtTypes = new Dictionary<string, Type>();
 
-            //static LinqRuntimeTypeBuilder()
-            //{
-            //    moduleBuilder = Thread.GetDomain().DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.Run).DefineDynamicModule(assemblyName.Name);
-            //}
+            static LinqRuntimeTypeBuilder()
+            {
+                moduleBuilder = AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.Run).DefineDynamicModule(assemblyName.Name);
+                //moduleBuilder = Thread.GetDomain().DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.Run).DefineDynamicModule(assemblyName.Name);
+            }
 
             private static string GetTypeKey(Dictionary<string, Type> fields)
             {
