@@ -16,6 +16,10 @@ namespace Linq.Extension
 {
     public static class LinqDynamicExtension
     {
+        private struct FieldNameExpression 
+        {
+            
+        }
         public static Expression<Func<TSource, T>> DynamicSelectGenerator<TSource, T>(string Fields = "")
         {
             string[] EntityFields;
@@ -158,6 +162,115 @@ namespace Linq.Extension
 
                     if (searchInput != null && searchInput.Filters != null && searchInput.Filters.Count > 0)
                     {
+                        var distinctFieldNames = searchInput.Filters.DistinctBy(f => f.FieldName)
+                            .Select(f => f.FieldName)
+                            .ToList();
+                        List<FilterInput> fieldFilters = null;
+                        if (distinctFieldNames?.Count > 0)
+                        {
+                            Dictionary<FilterInput, Expression> fieldExpressions = new Dictionary<FilterInput, Expression>();
+                            Expression fieldCombined = null;
+                            foreach (var fieldName in distinctFieldNames)
+                            {
+                                fieldFilters = null;
+                                fieldFilters = searchInput.Filters
+                                    .FindAll(f => f.FieldName == fieldName)
+                                    .ToList();
+
+                                if (fieldFilters?.Count > 0)
+                                {
+                                    fieldCombined = null;
+                                    fieldExpressions.Add(fieldFilters[0], null);
+                                    foreach (FilterInput filterInput in fieldFilters)
+                                    {
+                                        if (filterInput != null)
+                                        {
+                                            columnNameProperty = Expression.Property(pe, sourceProperties[filterInput.FieldName].Name);
+                                            value = filterInput.Value;
+                                            //columnValue = GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType);
+                                            switch (filterInput.Operation)
+                                            {
+                                                case FilterOperationEnum.gt:
+                                                    e1 = Expression.GreaterThan(columnNameProperty,
+                                                        GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                                    break;
+                                                case FilterOperationEnum.gte:
+                                                    e1 = Expression.GreaterThanOrEqual(columnNameProperty,
+                                                        GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                                    break;
+                                                case FilterOperationEnum.lt:
+                                                    e1 = Expression.LessThan(columnNameProperty,
+                                                        GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                                    break;
+                                                case FilterOperationEnum.lte:
+                                                    e1 = Expression.LessThanOrEqual(columnNameProperty,
+                                                        GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                                    break;
+                                                case FilterOperationEnum.neq:
+                                                    e1 = Expression.NotEqual(columnNameProperty,
+                                                        GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                                    break;
+                                                case FilterOperationEnum.contains:
+                                                    method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("Contains");
+                                                    e1 = Expression.Call(columnNameProperty, method,
+                                                        GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                                    break;
+                                                case FilterOperationEnum.notcontains:
+                                                    method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("Contains");
+                                                    e1 = Expression.Not(Expression.Call(columnNameProperty, method,
+                                                        GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType)));
+                                                    break;
+                                                case FilterOperationEnum.startswith:
+                                                    method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("StartsWith"
+                                                        , new Type[] { typeof(string) });
+                                                    e1 = Expression.Call(columnNameProperty, method,
+                                                        GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                                    break;
+                                                case FilterOperationEnum.endswith:
+                                                    method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("EndsWith"
+                                                        , new Type[] { typeof(string) });
+                                                    e1 = Expression.Call(columnNameProperty, method,
+                                                        GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                                    break;
+                                                case FilterOperationEnum.inlist:
+                                                    string strValue = Convert.ToString(value);
+                                                    if (!string.IsNullOrEmpty(strValue))
+                                                    {
+                                                        var inList = GetListForInOperationFromValue(strValue,
+                                                            sourceProperties[filterInput.FieldName], pe, out method, out Expression propExpression);
+                                                        if (inList != null && method != null)
+                                                            e1 = Expression.Call(Expression.Constant(inList), method, propExpression);
+                                                    }
+                                                    break;
+                                                case FilterOperationEnum.notinlist:
+                                                    string strValue2 = Convert.ToString(value);
+                                                    if (!string.IsNullOrEmpty(strValue2))
+                                                    {
+                                                        var inList = GetListForInOperationFromValue(strValue2,
+                                                            sourceProperties[filterInput.FieldName], pe, out method, out Expression propExpression);
+                                                        if (inList != null && method != null)
+                                                            e1 = Expression.Not(
+                                                                Expression.Call(Expression.Constant(inList), method, propExpression));
+                                                    }
+                                                    break;
+                                                default:
+                                                    e1 = Expression.Equal(columnNameProperty,
+                                                        GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                                    break;
+                                            }
+                                            fieldCombined = GetCombinedExpression(fieldCombined, e1, filterInput);
+                                        } // End of if (filterInput != null)
+                                    } // End of foreach (FilterInput filterInput in fieldFilters)
+                                    fieldExpressions[fieldExpressions.Keys.Last()] = fieldCombined;                                        
+                                } // End of if (fieldFilters?.Count > 0)
+                            } // End of foreach (var fieldName in distinctFieldNames)
+                            foreach(FilterInput fieldFilter in fieldExpressions.Keys)
+                            {
+                                combined = GetCombinedExpression(combined, fieldExpressions[fieldFilter], fieldFilter);
+                            }
+                        } // End of if (distinctFieldNames?.Count > 0)
+                        #region Commented foreach searchInput.Filters code
+                        /*
                         foreach (FilterInput filterInput in searchInput.Filters)
                         {
                             if (filterInput != null)
@@ -238,7 +351,9 @@ namespace Linq.Extension
                                 combined = GetCombinedExpression(combined, e1, filterInput);
                             }
                         }
-                    }
+                        */
+                        #endregion
+                    } // End of if (searchInput != null && searchInput.Filters != null && searchInput.Filters.Count > 0)
                 }
             }
             return combined;
@@ -332,6 +447,12 @@ namespace Linq.Extension
 
         private static Expression GetCombinedExpression(Expression first, Expression second, FilterInput filterInput = null)
         {
+            bool isOriginalFirstNull = first == null;
+            if (first == null && second != null)
+            {
+                first = second;
+                return first;
+            }
             if (first == null)
             {
                 first = Expression.Constant(true);
@@ -342,15 +463,20 @@ namespace Linq.Extension
             {
                 if (filterInput != null)
                 {
-                    switch (filterInput.Logic)
+                    if (!isOriginalFirstNull)
                     {
-                        case FilterLogicEnum.or:
-                            first = Expression.Or(first, second);
-                            break;
-                        default:
-                            first = Expression.And(first, second);
-                            break;
+                        switch (filterInput.Logic)
+                        {
+                            case FilterLogicEnum.or:
+                                first = Expression.Or(first, second);
+                                break;
+                            default:
+                                first = Expression.And(first, second);
+                                break;
+                        }
                     }
+                    else
+                        first = second;// Expression.And(first, second);
                 }
                 else
                     first = Expression.And(first, second);

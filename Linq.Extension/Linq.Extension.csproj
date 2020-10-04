@@ -7,11 +7,11 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <Authors>Nav Malik</Authors>
     <Copyright>Nav Malik</Copyright>
-    <Description>Linq Extension to provide Dynamic Where Condition and Dynamic Select, Dynamic Take If Positive Number, Pagination. Use SearchInput class for Dynamic Where and PaginationInput for pagination (take, skip and sort).</Description>
-    <PackageTags>Linq Extension DynamicSelect DynamicWhere Linq.Entities LinqEntity Linq.Entity</PackageTags>
-    <Version>1.0.0.5</Version>
+    <Description>Linq Extension to provide Dynamic Where Condition and Dynamic Select, Dynamic Take If Positive Number, Pagination and Nesting Predicates with parenthesis. Use SearchInput class for Dynamic Where and PaginationInput for pagination (take, skip and sort).</Description>
+    <PackageTags>Linq Extension DynamicSelect DynamicWhere Linq.Entities LinqEntity Linq.Entity Nesting Predicates NestingPredicates</PackageTags>
+    <Version>1.0.0.7</Version>
     <AssemblyVersion>1.0.0.5</AssemblyVersion>
-    <PackageReleaseNotes>Added option to fetch parent entity along with parent id in Dynamic Select.</PackageReleaseNotes>
+    <PackageReleaseNotes>Added Nesting Predicates with parenthesis for same field name. Grouped same field name expressions into one parenthesis and apply the logic of first filter of sequence of same field with other fields.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
