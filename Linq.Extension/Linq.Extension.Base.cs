@@ -26,7 +26,15 @@ namespace Linq.Extension.Filter
         startswith,
         endswith,
         inlist,
-        notinlist
+        notinlist,
+        notstartswith,
+        notendswith,
+        containsinlist,
+        notcontainsinlist,
+        startswithinlist,
+        endswithinlist,
+        notstartswithinlist,
+        notendswithinlist
     }
     public enum FilterLogicEnum
     {

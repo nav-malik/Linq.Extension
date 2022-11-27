@@ -226,11 +226,47 @@ namespace Linq.Extension
                                                     e1 = Expression.Call(columnNameProperty, method,
                                                         GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
                                                     break;
+                                                case FilterOperationEnum.notstartswith:
+                                                    method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("StartsWith"
+                                                        , new Type[] { typeof(string) });
+                                                    e1 = Expression.Not(Expression.Call(columnNameProperty, method,
+                                                        GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType)));
+                                                    break;
                                                 case FilterOperationEnum.endswith:
                                                     method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("EndsWith"
                                                         , new Type[] { typeof(string) });
                                                     e1 = Expression.Call(columnNameProperty, method,
                                                         GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                                    break;
+                                                case FilterOperationEnum.notendswith:
+                                                    method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("EndsWith"
+                                                        , new Type[] { typeof(string) });
+                                                    e1 = Expression.Not(Expression.Call(columnNameProperty, method,
+                                                        GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType)));
+                                                    break;
+                                                case FilterOperationEnum.containsinlist:
+                                                    e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
+                                                        , false, true, false, false);
+                                                    break;
+                                                case FilterOperationEnum.notcontainsinlist:
+                                                    e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
+                                                        , true, true, false, false);
+                                                    break;
+                                                case FilterOperationEnum.startswithinlist:
+                                                    e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
+                                                        , false, false, true, false);
+                                                    break;
+                                                case FilterOperationEnum.notstartswithinlist:
+                                                    e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
+                                                        , true, false, true, false);
+                                                    break;
+                                                case FilterOperationEnum.endswithinlist:
+                                                    e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
+                                                        , false, false, false, true);
+                                                    break;
+                                                case FilterOperationEnum.notendswithinlist:
+                                                    e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
+                                                        , true, false, false, true);
                                                     break;
                                                 case FilterOperationEnum.inlist:
                                                     string strValue = Convert.ToString(value);
@@ -357,6 +393,63 @@ namespace Linq.Extension
                 }
             }
             return combined;
+        }
+
+        private static Expression GetCombinedStringNonEqualInListExpressions(FilterInput filterInput, 
+            Dictionary<string, PropertyInfo> sourceProperties,
+            Expression columnNameProperty,
+            bool isNot, bool isContains, bool isStartsWith, bool isEndsWith)
+        {
+            Expression fieldCombined = null;
+            FilterInput filterInputLogic = new FilterInput
+            {
+                Logic = isNot ? FilterLogicEnum.and : FilterLogicEnum.or
+            };
+            MethodInfo method = null;
+            Expression e1 = null;
+            object value = null;
+            FilterInput[] fieldFilters = new FilterInput[] { };
+            var values = filterInput.Value.Split(',');
+            string val = string.Empty;
+            foreach(string v in values)
+            {
+                val = v;
+                if (!string.IsNullOrEmpty(val))
+                {
+                    val = val.Trim();
+                    value = val;
+                    if (isStartsWith)
+                    {
+                        method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("StartsWith"
+                                       , new Type[] { typeof(string) });
+                        e1 = Expression.Call(columnNameProperty, method,
+                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                    }
+                    else if (isEndsWith)
+                    {
+                        method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("EndsWith"
+                                        , new Type[] { typeof(string) });
+                        e1 = Expression.Call(columnNameProperty, method,
+                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                    }
+                    else if (isContains)
+                    {
+                        method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("Contains"
+                                        , new Type[] { typeof(string) });
+                        e1 = Expression.Call(columnNameProperty, method,
+                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                    }
+                    if (isNot)
+                    {
+                        fieldCombined = GetCombinedExpression(fieldCombined, Expression.Not(e1), filterInputLogic);
+                    }
+                    else
+                        fieldCombined = GetCombinedExpression(fieldCombined, e1, filterInputLogic);
+
+                }
+            }
+           
+            return fieldCombined;
         }
         public static Expression<Func<T, bool>> DynamicWherePredicate<T>(IDictionary<string, object> parameters)
         {
