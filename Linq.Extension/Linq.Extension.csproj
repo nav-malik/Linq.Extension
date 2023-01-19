@@ -9,8 +9,8 @@
     <Copyright>Nav Malik</Copyright>
     <Description>Linq Extension to provide Dynamic Where Condition and Dynamic Select, Dynamic Take If Positive Number, Pagination and Nesting Predicates with parenthesis. Use SearchInput class for Dynamic Where and PaginationInput for pagination (take, skip and sort).</Description>
     <PackageTags>Linq Extension DynamicSelect DynamicWhere Linq.Entities LinqEntity Linq.Entity Nesting Predicates NestingPredicates</PackageTags>
-    <Version>2.0.0.0</Version>
-    <PackageReleaseNotes>UPGRADED to .NET 6.0
+    <Version>2.0.0.1</Version>
+    <PackageReleaseNotes>UPGRADED to .NET 6.0 and removed morelinq package. 
 Added notstartswith, notendswith, containsinlist, notcontainsinlist,
  startswithinlist,
  endswithinlist, notstartswithinlist, notendswithinlist in FilterOperationEnum. These will only be applicable to Strings fields
@@ -24,9 +24,7 @@ E.g. if Contains In List is used then the values will be OR together, for exampl
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="morelinq" Version="3.3.2" />
-    <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
-    <PackageReference Include="System.ComponentModel.Annotations" Version="4.7.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
   </ItemGroup>
 
 </Project>
