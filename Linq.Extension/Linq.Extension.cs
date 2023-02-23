@@ -125,7 +125,8 @@ namespace Linq.Extension
 
                 foreach (var key in parameters.Keys)
                 {
-                    if (key == "search")
+                    //if (key == "search")
+                    if (parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Filter.SearchInput")
                     {
                         searchInput = JsonConvert.DeserializeObject<SearchInput>(JsonConvert.SerializeObject(parameters[key]));
                         //searchInput = parameters[key].GetPropertyValue<SearchInput>();
@@ -147,7 +148,8 @@ namespace Linq.Extension
 
                         }
                     }
-                    else if (key != "pagination")
+                    //else if (key != "pagination")
+                    else if (!(parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Pagination.PaginationInput"))
                     {
                         value = parameters[key];
                         var property = typeof(T).GetProperty(ToTitleCase(key));
@@ -211,60 +213,98 @@ namespace Linq.Extension
                                                         GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
                                                     break;
                                                 case FilterOperationEnum.contains:
-                                                    method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("Contains");
+                                                    if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                                        throw new Exception("Only fields of 'String' type can have 'contains' operation. FieldName: '"
+                                                            + filterInput.FieldName + "'");
+                                                    method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("Contains"
+                                                        , new Type[] { typeof(string) });
                                                     e1 = Expression.Call(columnNameProperty, method,
                                                         GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
                                                     break;
                                                 case FilterOperationEnum.notcontains:
-                                                    method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("Contains");
+                                                    if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                                        throw new Exception("Only fields of 'String' type can have 'notcontains' operation. FieldName: '"
+                                                            + filterInput.FieldName + "'");
+                                                    method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("Contains"
+                                                        , new Type[] { typeof(string) });
                                                     e1 = Expression.Not(Expression.Call(columnNameProperty, method,
                                                         GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType)));
                                                     break;
                                                 case FilterOperationEnum.startswith:
+                                                    if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                                        throw new Exception("Only fields of 'String' type can have 'startswith operation. FieldName: '"
+                                                            + filterInput.FieldName + "'");
                                                     method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("StartsWith"
                                                         , new Type[] { typeof(string) });
                                                     e1 = Expression.Call(columnNameProperty, method,
                                                         GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
                                                     break;
                                                 case FilterOperationEnum.notstartswith:
+                                                    if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                                        throw new Exception("Only fields of 'String' type can have 'notstartswith' operation. FieldName: '"
+                                                            + filterInput.FieldName + "'");
                                                     method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("StartsWith"
                                                         , new Type[] { typeof(string) });
                                                     e1 = Expression.Not(Expression.Call(columnNameProperty, method,
                                                         GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType)));
                                                     break;
                                                 case FilterOperationEnum.endswith:
+                                                    if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                                        throw new Exception("Only fields of 'String' type can have 'endswith' operation. FieldName: '"
+                                                            + filterInput.FieldName + "'");
                                                     method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("EndsWith"
                                                         , new Type[] { typeof(string) });
                                                     e1 = Expression.Call(columnNameProperty, method,
                                                         GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
                                                     break;
                                                 case FilterOperationEnum.notendswith:
+                                                    if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                                        throw new Exception("Only fields of 'String' type can have 'notendswith' operation. FieldName: '"
+                                                            + filterInput.FieldName + "'");
                                                     method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("EndsWith"
                                                         , new Type[] { typeof(string) });
                                                     e1 = Expression.Not(Expression.Call(columnNameProperty, method,
                                                         GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType)));
                                                     break;
                                                 case FilterOperationEnum.containsinlist:
+                                                    if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                                        throw new Exception("Only fields of 'String' type can have 'containsinlist' operation. FieldName: '"
+                                                            + filterInput.FieldName + "'");
                                                     e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
                                                         , false, true, false, false);
                                                     break;
                                                 case FilterOperationEnum.notcontainsinlist:
+                                                    if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                                        throw new Exception("Only fields of 'String' type can have 'notcontainsinlist' operation. FieldName: '"
+                                                            + filterInput.FieldName + "'");
                                                     e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
                                                         , true, true, false, false);
                                                     break;
                                                 case FilterOperationEnum.startswithinlist:
+                                                    if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                                        throw new Exception("Only fields of 'String' type can have 'startswithinlist' operation. FieldName: '"
+                                                            + filterInput.FieldName + "'");
                                                     e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
                                                         , false, false, true, false);
                                                     break;
                                                 case FilterOperationEnum.notstartswithinlist:
+                                                    if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                                        throw new Exception("Only fields of 'String' type can have 'notstartswithinlist' operation. FieldName: '"
+                                                            + filterInput.FieldName + "'");
                                                     e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
                                                         , true, false, true, false);
                                                     break;
                                                 case FilterOperationEnum.endswithinlist:
+                                                    if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                                        throw new Exception("Only fields of 'String' type can have 'endswithinlist' operation. FieldName: '"
+                                                            + filterInput.FieldName + "'");
                                                     e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
                                                         , false, false, false, true);
                                                     break;
                                                 case FilterOperationEnum.notendswithinlist:
+                                                    if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                                        throw new Exception("Only fields of 'String' type can have 'notendswithinlist' operation. FieldName: '"
+                                                            + filterInput.FieldName + "'");
                                                     e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
                                                         , true, false, false, true);
                                                     break;
@@ -839,9 +879,14 @@ namespace Linq.Extension
         public static IQueryable<T> Pagination<T>(this IQueryable<T> source, IDictionary<string, object> parameters)
         {
             PaginationInput pagingState = null;
-            if (parameters != null && parameters.ContainsKey("pagination"))
+            if (parameters != null && parameters.Count > 0)
             {
-                pagingState = JsonConvert.DeserializeObject<PaginationInput>(JsonConvert.SerializeObject(parameters["pagination"]));
+                foreach (var key in parameters.Keys)
+                    if (parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Pagination.PaginationInput")
+                    {
+                        pagingState = JsonConvert.DeserializeObject<PaginationInput>(JsonConvert.SerializeObject(parameters["pagination"]));
+                        break;
+                    }
                 //pagingState = parameters["pagination"].GetPropertyValue<PaginationInput>();
             }
             if (pagingState == null)
