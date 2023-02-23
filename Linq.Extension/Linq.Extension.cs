@@ -126,7 +126,11 @@ namespace Linq.Extension
                 foreach (var key in parameters.Keys)
                 {
                     //if (key == "search")
-                    if (parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Filter.SearchInput")
+                    if (parameters[key] != null
+                        && (parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Filter.SearchInput"
+                            || key?.ToLower() == "search"
+                            || parameters[key] is SearchInput
+                        ))
                     {
                         searchInput = JsonConvert.DeserializeObject<SearchInput>(JsonConvert.SerializeObject(parameters[key]));
                         //searchInput = parameters[key].GetPropertyValue<SearchInput>();
@@ -149,7 +153,9 @@ namespace Linq.Extension
                         }
                     }
                     //else if (key != "pagination")
-                    else if (!(parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Pagination.PaginationInput"))
+                    else if ( parameters[key] != null
+                        && parameters[key]?.GetType()?.FullName != "GraphQL.Extensions.Base.Pagination.PaginationInput"
+                        && parameters[key] is not PaginationInput)
                     {
                         value = parameters[key];
                         var property = typeof(T).GetProperty(ToTitleCase(key));
@@ -882,7 +888,10 @@ namespace Linq.Extension
             if (parameters != null && parameters.Count > 0)
             {
                 foreach (var key in parameters.Keys)
-                    if (parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Pagination.PaginationInput")
+                    if (parameters[key] != null
+                        && (parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Pagination.PaginationInput"
+                        || key.ToLower() == "pagination"
+                        || parameters[key] is PaginationInput))
                     {
                         pagingState = JsonConvert.DeserializeObject<PaginationInput>(JsonConvert.SerializeObject(parameters["pagination"]));
                         break;
