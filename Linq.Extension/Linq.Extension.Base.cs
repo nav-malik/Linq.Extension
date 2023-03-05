@@ -9,9 +9,16 @@ namespace Linq.Extension.Filter
         public string Value { get; set; }
         public string FieldName { get; set; }
     }
+
+    public class FilterGroupInput
+    {
+        public FilterLogicEnum Logic { get; set; }
+        public List<FilterInput> Filters { get; set; }
+    }
     public class SearchInput
     {
-        public List<FilterInput> Filters { get; set; }
+        //public List<FilterInput> Filters { get; set; }
+        public List<FilterGroupInput> FilterGroups { get; set; }
     }
     public enum FilterOperationEnum
     {
