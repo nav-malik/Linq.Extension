@@ -9,8 +9,10 @@
     <Copyright>Nav Malik</Copyright>
     <Description>Linq Extension to provide Dynamic Where Condition and Dynamic Select, Dynamic Take If Positive Number, Pagination and Nesting Predicates with parenthesis. Use SearchInput class for Dynamic Where and PaginationInput for pagination (take, skip and sort).</Description>
     <PackageTags>Linq Extension DynamicSelect DynamicWhere Linq.Entities LinqEntity Linq.Entity Nesting Predicates NestingPredicates</PackageTags>
-    <Version>3.0.0</Version>
-    <PackageReleaseNotes>Major change.  
+    <Version>3.0.1</Version>
+    <PackageReleaseNotes>Fix the sort on nullable fields.
+Added dynamic Group By with list of strings as names of the fields Group By on.
+Major change.  
 Added Filter Groups. This allow to create SQL queries with 'Parenthesis' () and separate And/Or groups with () in SQL.</PackageReleaseNotes>
     <Title>Linq.Extension</Title>
     <RepositoryUrl>https://github.com/nav-malik/Linq.Extension</RepositoryUrl>

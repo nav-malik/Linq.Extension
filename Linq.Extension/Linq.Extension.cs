@@ -895,9 +895,9 @@ namespace Linq.Extension
                     prefix = i < 1 ? "Order" : "Then";
                     sort = sorts[i];
                     property = typeof(T).GetProperty(ToTitleCase(sort.FieldName));
-                    if (property.PropertyType.IsGenericType)
-                        propertyType = Nullable.GetUnderlyingType(property.PropertyType);
-                    else
+                    //if (property.PropertyType.IsGenericType)
+                    //    propertyType = Nullable.GetUnderlyingType(property.PropertyType);
+                    //else
                         propertyType = property.PropertyType;
                     if (!string.IsNullOrEmpty(sort.FieldName))
                     {
@@ -1002,6 +1002,32 @@ namespace Linq.Extension
                     .SkipIfPositiveNumber(pagingState.Skip)
                     .TakeIfPositiveNumber(pagingState.Take);
             }
+        }
+
+        public static Expression<Func<TSource, dynamic>> GetDynamicGroupBy<TSource>(IEnumerable<string> groupFieldNames)
+        {
+            try
+            {
+                var sourceProperties = GetSelectionSetAsDictionaryOfProperties<TSource>(groupFieldNames);
+
+                Type dynamicType = LinqRuntimeTypeBuilder.GetDynamicType(sourceProperties.Values);
+
+                ParameterExpression sourceItem = Expression.Parameter(typeof(TSource), "t");
+                IEnumerable<MemberBinding> bindings = dynamicType.GetFields()
+                    .Select(p => Expression.Bind(p, Expression.Property(sourceItem, sourceProperties[p.Name])))
+                    .OfType<MemberBinding>();
+
+                var memberInitExpression = Expression.MemberInit(Expression.New(dynamicType), bindings);
+
+                var keySelector = Expression.Lambda<Func<TSource, dynamic>>(memberInitExpression, sourceItem);
+
+                return keySelector;
+            }
+            catch(Exception Ex)
+            {
+
+            }
+            return null;
         }
 
         public static class LinqRuntimeTypeBuilder
