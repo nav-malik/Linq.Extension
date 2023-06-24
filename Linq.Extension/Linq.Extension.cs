@@ -881,62 +881,69 @@ namespace Linq.Extension
         }
         public static IQueryable<T> SortBy<T>(this IQueryable<T> source, List<SortInput> sorts)
         {
-            if (sorts != null && sorts.Count > 0)
+            try
             {
-                MethodInfo method;
-                SortInput sort = null;
-                string prefix = "Order";
-                Expression exprNext = null;
-                PropertyInfo property = null;
-                Type propertyType = null;
-                MethodInfo methodSortExpr = null;
-                for (int i = 0; i < sorts.Count; i++)
+                if (sorts != null && sorts.Count > 0)
                 {
-                    prefix = i < 1 ? "Order" : "Then";
-                    sort = sorts[i];
-                    property = typeof(T).GetProperty(ToTitleCase(sort.FieldName));
-                    //if (property.PropertyType.IsGenericType)
-                    //    propertyType = Nullable.GetUnderlyingType(property.PropertyType);
-                    //else
-                        propertyType = property.PropertyType;
-                    if (!string.IsNullOrEmpty(sort.FieldName))
+                    MethodInfo method;
+                    SortInput sort = null;
+                    string prefix = "Order";
+                    Expression exprNext = null;
+                    PropertyInfo property = null;
+                    Type propertyType = null;
+                    MethodInfo methodSortExpr = null;
+                    for (int i = 0; i < sorts.Count; i++)
                     {
-
-                        switch (sort.Direction)
-                        {
-                            case SortDirectionEnum.desc:
-                                method = typeof(Queryable).GetMethods()
-                                .Where(x => x.Name == prefix + "ByDescending")
-                                .First().MakeGenericMethod(typeof(T), propertyType);
-                                break;
-                            default:
-                                method = typeof(Queryable).GetMethods()
-                                .Where(x => x.Name == prefix + "By")
-                                .First().MakeGenericMethod(typeof(T), propertyType);
-                                break;
-                        }
-                        if (i == 0)
-                        {
-                            exprNext = source.Expression;
-                        }
-
+                        prefix = i < 1 ? "Order" : "Then";
+                        sort = sorts[i];
+                        property = typeof(T).GetProperty(ToTitleCase(sort.FieldName));
+                        
                         if (property != null)
                         {
-                            methodSortExpr = typeof(LinqDynamicExtension)
-                                .GetMethod("GetSortExpression", BindingFlags.NonPublic | BindingFlags.Static)
-                                .MakeGenericMethod(typeof(T), propertyType);
-                            exprNext = Expression.Call(
-                                        null,
-                                        method,
-                                        exprNext,
-                                        (Expression)methodSortExpr.Invoke(null, new string[] { sort.FieldName }));
+                            //if (property.PropertyType.IsGenericType)
+                            //    propertyType = Nullable.GetUnderlyingType(property.PropertyType);
+                            //else
+                            propertyType = property.PropertyType;
+                            if (!string.IsNullOrEmpty(sort.FieldName))
+                            {
+
+                                switch (sort.Direction)
+                                {
+                                    case SortDirectionEnum.desc:
+                                        method = typeof(Queryable).GetMethods()
+                                        .Where(x => x.Name == prefix + "ByDescending")
+                                        .First().MakeGenericMethod(typeof(T), propertyType);
+                                        break;
+                                    default:
+                                        method = typeof(Queryable).GetMethods()
+                                        .Where(x => x.Name == prefix + "By")
+                                        .First().MakeGenericMethod(typeof(T), propertyType);
+                                        break;
+                                }
+                                if (i == 0)
+                                {
+                                    exprNext = source.Expression;
+                                }
+                                methodSortExpr = typeof(LinqDynamicExtension)
+                                    .GetMethod("GetSortExpression", BindingFlags.NonPublic | BindingFlags.Static)
+                                    .MakeGenericMethod(typeof(T), propertyType);
+                                exprNext = Expression.Call(
+                                            null,
+                                            method,
+                                            exprNext,
+                                            (Expression)methodSortExpr.Invoke(null, new string[] { sort.FieldName }));
+                            }
                         }
                     }
+                    return source.Provider.CreateQuery<T>(exprNext);
                 }
-                return source.Provider.CreateQuery<T>(exprNext);
+                else
+                    return source;
             }
-            else
+            catch(Exception Ex)
+            {
                 return source;
+            }
         }
         public static IQueryable<T> TakeIfPositiveNumber<T>(this IQueryable<T> source, int? count)
         {
