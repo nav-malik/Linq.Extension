@@ -12,6 +12,7 @@ using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 
 namespace Linq.Extension
 {
@@ -112,13 +113,12 @@ namespace Linq.Extension
         {
             //combine them with and 1=1 Like no expression
             Expression combined = null;
-
-            MethodInfo method = null;
+            
 
             if (parameters != null && parameters.Keys != null && parameters.Keys.Count > 0)
             {
                 SearchInput searchInput = null;
-                Dictionary<string, PropertyInfo> sourceProperties = new Dictionary<string, PropertyInfo>();
+                Dictionary<string, PropertyInfo> sourceProperties = null;
                 Expression columnValue = null;
                 Expression columnNameProperty = null;
                 Expression e1 = null;
@@ -128,7 +128,7 @@ namespace Linq.Extension
                 {
                     //if (key == "search")
                     if (parameters[key] != null
-                        && (parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Filter.SearchInput"
+                        && (parameters[key]?.GetType()?.FullName == "GraphQL.Extension.Base.Filter.SearchInput"
                             || key?.ToLower() == "search"
                             || parameters[key] is SearchInput
                         ))
@@ -139,33 +139,12 @@ namespace Linq.Extension
 
                         if (searchInput?.FilterGroups?.Count > 0 )
                         {
-                            foreach (var filterGroup in searchInput.FilterGroups)
-                            {
-                                var sPropertiesInner = filterGroup?.Filters
-                                    .DistinctBy(x => x.FieldName)
-                                .ToDictionary(filter => filter.FieldName,
-                                    filter => typeof(T).GetProperty(ToTitleCase(filter.FieldName)));
-                                if (sPropertiesInner?.Count > 0)
-                                {
-                                    foreach(var sPropInner in sPropertiesInner)
-                                    {
-                                        if (sPropInner.Value != null && !(bool)sourceProperties?.ContainsKey(sPropInner.Key))
-                                            sourceProperties.Add(sPropInner.Key, sPropInner.Value);
-                                    }
-                                }
-                                if (sourceProperties == null || sourceProperties.Count == 0)
-                                    throw new Exception
-                                        ($"Filters can't be empty. Either provide filters or remove 'search' argument");// on type {context.ReturnType.GetType().GenericTypeArguments[0].Name}");
-                                var nullProps = sourceProperties.Where(x => x.Value == null).FirstOrDefault();
-                                if (!nullProps.Equals(default(KeyValuePair<string, PropertyInfo>)))
-                                    throw new Exception
-                                        ($"Invalid Filter: filed name '{nullProps.Key}' doesn't exists ");//in the type {context.ReturnType.GetType().GenericTypeArguments[0].Name}.");
-                            }
+                            sourceProperties = GetSourcePropertiesByFilterGroups<T>(searchInput.FilterGroups);
                         }
                     }
                     //else if (key != "pagination")
                     else if ( parameters[key] != null
-                        && parameters[key]?.GetType()?.FullName != "GraphQL.Extensions.Base.Pagination.PaginationInput"
+                        && parameters[key]?.GetType()?.FullName != "GraphQL.Extension.Base.Pagination.PaginationInput"
                         && parameters[key] is not PaginationInput)
                     {
                         value = parameters[key];
@@ -178,299 +157,328 @@ namespace Linq.Extension
                             combined = GetCombinedExpression(combined, e1, null);
                         }
                     }
-                    if (searchInput?.FilterGroups?.Count > 0)
+                    if (searchInput?.FilterGroups?.Count > 0 && sourceProperties?.Count > 0 && pe != null)
                     {
-                        Dictionary<int, Expression> filterGroupExpressions = new Dictionary<int, Expression>();
-                        //foreach(var filterGroup in searchInput.FilterGroups)
-                        for (int groupIndex = 0; groupIndex < searchInput.FilterGroups.Count; groupIndex++)
-                        {
-                            var filterGroup = searchInput.FilterGroups[groupIndex];
-                            combined = null;
-                            if (filterGroup?.Filters?.Count > 0)
-                            {
-                                var distinctFieldNames = filterGroup.Filters.DistinctBy(f => f.FieldName)
-                                    .Select(f => f.FieldName)
-                                    .ToList();
-                                List<FilterInput> fieldFilters = null;
-                                if (distinctFieldNames?.Count > 0)
-                                {
-                                    Dictionary<FilterInput, Expression> fieldExpressions = new Dictionary<FilterInput, Expression>();
-                                    Expression fieldCombined = null;
-                                    foreach (var fieldName in distinctFieldNames)
-                                    {
-                                        fieldFilters = null;
-                                        fieldFilters = filterGroup.Filters
-                                            .FindAll(f => f.FieldName == fieldName)
-                                            .ToList();
-
-                                        if (fieldFilters?.Count > 0)
-                                        {
-                                            fieldCombined = null;
-                                            fieldExpressions.Add(fieldFilters[0], null);
-                                            foreach (FilterInput filterInput in fieldFilters)
-                                            {
-                                                if (filterInput != null)
-                                                {
-                                                    columnNameProperty = Expression.Property(pe, sourceProperties[filterInput.FieldName].Name);
-                                                    value = filterInput.Value;
-                                                    //columnValue = GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType);
-                                                    switch (filterInput.Operation)
-                                                    {
-                                                        case FilterOperationEnum.gt:
-                                                            e1 = Expression.GreaterThan(columnNameProperty,
-                                                                GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
-                                                            break;
-                                                        case FilterOperationEnum.gte:
-                                                            e1 = Expression.GreaterThanOrEqual(columnNameProperty,
-                                                                GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
-                                                            break;
-                                                        case FilterOperationEnum.lt:
-                                                            e1 = Expression.LessThan(columnNameProperty,
-                                                                GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
-                                                            break;
-                                                        case FilterOperationEnum.lte:
-                                                            e1 = Expression.LessThanOrEqual(columnNameProperty,
-                                                                GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
-                                                            break;
-                                                        case FilterOperationEnum.neq:
-                                                            e1 = Expression.NotEqual(columnNameProperty,
-                                                                GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
-                                                            break;
-                                                        case FilterOperationEnum.contains:
-                                                            if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
-                                                                throw new Exception("Only fields of 'String' type can have 'contains' operation. FieldName: '"
-                                                                    + filterInput.FieldName + "'");
-                                                            method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("Contains"
-                                                                , new Type[] { typeof(string) });
-                                                            e1 = Expression.Call(columnNameProperty, method,
-                                                                GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
-                                                            break;
-                                                        case FilterOperationEnum.notcontains:
-                                                            if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
-                                                                throw new Exception("Only fields of 'String' type can have 'notcontains' operation. FieldName: '"
-                                                                    + filterInput.FieldName + "'");
-                                                            method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("Contains"
-                                                                , new Type[] { typeof(string) });
-                                                            e1 = Expression.Not(Expression.Call(columnNameProperty, method,
-                                                                GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType)));
-                                                            break;
-                                                        case FilterOperationEnum.startswith:
-                                                            if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
-                                                                throw new Exception("Only fields of 'String' type can have 'startswith operation. FieldName: '"
-                                                                    + filterInput.FieldName + "'");
-                                                            method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("StartsWith"
-                                                                , new Type[] { typeof(string) });
-                                                            e1 = Expression.Call(columnNameProperty, method,
-                                                                GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
-                                                            break;
-                                                        case FilterOperationEnum.notstartswith:
-                                                            if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
-                                                                throw new Exception("Only fields of 'String' type can have 'notstartswith' operation. FieldName: '"
-                                                                    + filterInput.FieldName + "'");
-                                                            method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("StartsWith"
-                                                                , new Type[] { typeof(string) });
-                                                            e1 = Expression.Not(Expression.Call(columnNameProperty, method,
-                                                                GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType)));
-                                                            break;
-                                                        case FilterOperationEnum.endswith:
-                                                            if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
-                                                                throw new Exception("Only fields of 'String' type can have 'endswith' operation. FieldName: '"
-                                                                    + filterInput.FieldName + "'");
-                                                            method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("EndsWith"
-                                                                , new Type[] { typeof(string) });
-                                                            e1 = Expression.Call(columnNameProperty, method,
-                                                                GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
-                                                            break;
-                                                        case FilterOperationEnum.notendswith:
-                                                            if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
-                                                                throw new Exception("Only fields of 'String' type can have 'notendswith' operation. FieldName: '"
-                                                                    + filterInput.FieldName + "'");
-                                                            method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("EndsWith"
-                                                                , new Type[] { typeof(string) });
-                                                            e1 = Expression.Not(Expression.Call(columnNameProperty, method,
-                                                                GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType)));
-                                                            break;
-                                                        case FilterOperationEnum.containsinlist:
-                                                            if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
-                                                                throw new Exception("Only fields of 'String' type can have 'containsinlist' operation. FieldName: '"
-                                                                    + filterInput.FieldName + "'");
-                                                            e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
-                                                                , false, true, false, false);
-                                                            break;
-                                                        case FilterOperationEnum.notcontainsinlist:
-                                                            if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
-                                                                throw new Exception("Only fields of 'String' type can have 'notcontainsinlist' operation. FieldName: '"
-                                                                    + filterInput.FieldName + "'");
-                                                            e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
-                                                                , true, true, false, false);
-                                                            break;
-                                                        case FilterOperationEnum.startswithinlist:
-                                                            if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
-                                                                throw new Exception("Only fields of 'String' type can have 'startswithinlist' operation. FieldName: '"
-                                                                    + filterInput.FieldName + "'");
-                                                            e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
-                                                                , false, false, true, false);
-                                                            break;
-                                                        case FilterOperationEnum.notstartswithinlist:
-                                                            if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
-                                                                throw new Exception("Only fields of 'String' type can have 'notstartswithinlist' operation. FieldName: '"
-                                                                    + filterInput.FieldName + "'");
-                                                            e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
-                                                                , true, false, true, false);
-                                                            break;
-                                                        case FilterOperationEnum.endswithinlist:
-                                                            if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
-                                                                throw new Exception("Only fields of 'String' type can have 'endswithinlist' operation. FieldName: '"
-                                                                    + filterInput.FieldName + "'");
-                                                            e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
-                                                                , false, false, false, true);
-                                                            break;
-                                                        case FilterOperationEnum.notendswithinlist:
-                                                            if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
-                                                                throw new Exception("Only fields of 'String' type can have 'notendswithinlist' operation. FieldName: '"
-                                                                    + filterInput.FieldName + "'");
-                                                            e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
-                                                                , true, false, false, true);
-                                                            break;
-                                                        case FilterOperationEnum.inlist:
-                                                            string strValue = Convert.ToString(value);
-                                                            if (!string.IsNullOrEmpty(strValue))
-                                                            {
-                                                                var inList = GetListForInOperationFromValue(strValue,
-                                                                    sourceProperties[filterInput.FieldName], pe, out method, out Expression propExpression);
-                                                                if (inList != null && method != null)
-                                                                    e1 = Expression.Call(Expression.Constant(inList), method, propExpression);
-                                                            }
-                                                            break;
-                                                        case FilterOperationEnum.notinlist:
-                                                            string strValue2 = Convert.ToString(value);
-                                                            if (!string.IsNullOrEmpty(strValue2))
-                                                            {
-                                                                var inList = GetListForInOperationFromValue(strValue2,
-                                                                    sourceProperties[filterInput.FieldName], pe, out method, out Expression propExpression);
-                                                                if (inList != null && method != null)
-                                                                    e1 = Expression.Not(
-                                                                        Expression.Call(Expression.Constant(inList), method, propExpression));
-                                                            }
-                                                            break;
-                                                        default:
-                                                            e1 = Expression.Equal(columnNameProperty,
-                                                                GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
-                                                            break;
-                                                    }
-                                                    fieldCombined = GetCombinedExpression(fieldCombined, e1, filterInput);
-                                                } // End of if (filterInput != null)
-                                            } // End of foreach (FilterInput filterInput in fieldFilters)
-                                            fieldExpressions[fieldExpressions.Keys.Last()] = fieldCombined;
-                                        } // End of if (fieldFilters?.Count > 0)
-                                    } // End of foreach (var fieldName in distinctFieldNames)
-                                    foreach (FilterInput fieldFilter in fieldExpressions.Keys)
-                                    {
-                                        combined = GetCombinedExpression(combined, fieldExpressions[fieldFilter], fieldFilter);
-                                    }
-                                } // End of if (distinctFieldNames?.Count > 0)
-                                #region Commented foreach searchInput.Filters code
-                                /*
-                                foreach (FilterInput filterInput in searchInput.Filters)
-                                {
-                                    if (filterInput != null)
-                                    {
-                                        columnNameProperty = Expression.Property(pe, sourceProperties[filterInput.FieldName].Name);
-                                        value = filterInput.Value;
-                                        //columnValue = GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType);
-                                        switch (filterInput.Operation)
-                                        {
-                                            case FilterOperationEnum.gt:
-                                                e1 = Expression.GreaterThan(columnNameProperty,
-                                                    GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
-                                                break;
-                                            case FilterOperationEnum.gte:
-                                                e1 = Expression.GreaterThanOrEqual(columnNameProperty,
-                                                    GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
-                                                break;
-                                            case FilterOperationEnum.lt:
-                                                e1 = Expression.LessThan(columnNameProperty,
-                                                    GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
-                                                break;
-                                            case FilterOperationEnum.lte:
-                                                e1 = Expression.LessThanOrEqual(columnNameProperty,
-                                                    GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
-                                                break;
-                                            case FilterOperationEnum.neq:
-                                                e1 = Expression.NotEqual(columnNameProperty,
-                                                    GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
-                                                break;
-                                            case FilterOperationEnum.contains:
-                                                method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("Contains");
-                                                e1 = Expression.Call(columnNameProperty, method,
-                                                    GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
-                                                break;
-                                            case FilterOperationEnum.notcontains:
-                                                method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("Contains");
-                                                e1 = Expression.Not(Expression.Call(columnNameProperty, method,
-                                                    GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType)));
-                                                break;
-                                            case FilterOperationEnum.startswith:
-                                                method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("StartsWith"
-                                                    , new Type[] { typeof(string) });
-                                                e1 = Expression.Call(columnNameProperty, method,
-                                                    GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
-                                                break;
-                                            case FilterOperationEnum.endswith:
-                                                method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("EndsWith"
-                                                    , new Type[] { typeof(string) });
-                                                e1 = Expression.Call(columnNameProperty, method,
-                                                    GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
-                                                break;
-                                            case FilterOperationEnum.inlist:
-                                                string strValue = Convert.ToString(value);
-                                                if (!string.IsNullOrEmpty(strValue))
-                                                {
-                                                    var inList = GetListForInOperationFromValue(strValue,
-                                                        sourceProperties[filterInput.FieldName], pe, out method, out Expression propExpression);
-                                                    if (inList != null && method != null)
-                                                        e1 = Expression.Call(Expression.Constant(inList), method, propExpression);
-                                                }
-                                                break;
-                                            case FilterOperationEnum.notinlist:
-                                                string strValue2 = Convert.ToString(value);
-                                                if (!string.IsNullOrEmpty(strValue2))
-                                                {
-                                                    var inList = GetListForInOperationFromValue(strValue2,
-                                                        sourceProperties[filterInput.FieldName], pe, out method, out Expression propExpression);
-                                                    if (inList != null && method != null)
-                                                        e1 = Expression.Not(
-                                                            Expression.Call(Expression.Constant(inList), method, propExpression));
-                                                }
-                                                break;
-                                            default:
-                                                e1 = Expression.Equal(columnNameProperty,
-                                                    GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
-                                                break;
-                                        }
-                                        combined = GetCombinedExpression(combined, e1, filterInput);
-                                    }
-                                }
-                                */
-                                #endregion
-                            } // End of if (filterGroup?.Filters?.Count > 0)
-                            filterGroupExpressions.Add(groupIndex, combined);
-
-                        } // End of for (int groupIndex = 0; groupIndex < searchInput.FilterGroups.Count; groupIndex++)
-                        if (searchInput?.FilterGroups?.Count > 1)
-                        {
-                            combined = filterGroupExpressions[0];
-                            //foreach( int groupIndex in filterGroupExpressions.Keys)
-                            for (int groupIndex = 1; groupIndex < filterGroupExpressions?.Count; groupIndex++)
-                            {
-                                combined = GetGroupCombinedExpression(combined,
-                                    filterGroupExpressions[groupIndex], searchInput.FilterGroups[groupIndex].Logic);
-                            }
-                        }
+                        combined = GetCombinedExpressionForFilterGroups(FilterGroups: searchInput.FilterGroups,
+                            sourceProperties: sourceProperties, pe: pe);
                     } // End of if (searchInput?.FilterGroups?.Count > 0)
+                    else
+                        combined = null;
                 }
             }
             return combined;
+        }
+
+        private static Expression GetCombinedExpressionForFilterGroups(List<FilterGroupInput> FilterGroups,
+             Dictionary<string, PropertyInfo> sourceProperties, ParameterExpression pe)
+        {
+            Expression combined = null, groupCombined, filterCombined;
+
+            Dictionary<int, Expression> filterGroupExpressions = new Dictionary<int, Expression>();
+            //foreach(var filterGroup in searchInput.FilterGroups)
+            for (int groupIndex = 0; groupIndex < FilterGroups.Count; groupIndex++)
+            {
+                var filterGroup = FilterGroups[groupIndex];
+                combined = null;
+                groupCombined = null;
+                filterCombined = null;
+                if (filterGroup.ChildGroups?.Count > 0)
+                {
+                    groupCombined = GetCombinedExpressionForFilterGroups(filterGroup.ChildGroups, sourceProperties, pe);
+                }
+                if (filterGroup?.Filters?.Count > 0)
+                {
+                    filterCombined = GetCombinedExpressionForFilters(filterGroup.Filters, sourceProperties, pe);
+                    if (groupCombined != null && filterCombined != null)
+                        combined = GetGroupCombinedExpression(groupCombined, filterCombined,
+                            filterGroup.Filters[0].Logic);
+                    else if (groupCombined != null && filterCombined == null)
+                        combined = groupCombined;
+                    else if (groupCombined == null && filterCombined != null)
+                        combined = filterCombined;
+                    else
+                        combined = null;
+                } // End of if (filterGroup?.Filters?.Count > 0)
+                filterGroupExpressions.Add(groupIndex, combined);
+
+            } // End of for (int groupIndex = 0; groupIndex < searchInput.FilterGroups.Count; groupIndex++)
+            if (FilterGroups?.Count > 1)
+            {
+                combined = filterGroupExpressions[0];
+                //foreach( int groupIndex in filterGroupExpressions.Keys)
+                for (int groupIndex = 1; groupIndex < filterGroupExpressions?.Count; groupIndex++)
+                {
+                    combined = GetGroupCombinedExpression(combined,
+                        filterGroupExpressions[groupIndex], FilterGroups[groupIndex].Logic);
+                }
+            }
+
+            return combined;
+        }
+
+        private static Expression GetCombinedExpressionForFilters(List<FilterInput> Filters,
+             Dictionary<string, PropertyInfo> sourceProperties, ParameterExpression pe)
+        {
+            Expression combined = null;
+            MethodInfo method = null;
+            Expression columnNameProperty = null;
+            Expression e1 = null;
+            object value = null;
+
+            var distinctFieldNames = Filters.DistinctBy(f => f.FieldName)
+                        .Select(f => f.FieldName)
+                        .ToList();
+            List<FilterInput> fieldFilters = null;
+            if (distinctFieldNames?.Count > 0)
+            {
+                Dictionary<FilterInput, Expression> fieldExpressions = new Dictionary<FilterInput, Expression>();
+                Expression fieldCombined = null;
+                foreach (var fieldName in distinctFieldNames)
+                {
+                    fieldFilters = null;
+                    fieldFilters = Filters
+                        .FindAll(f => f.FieldName == fieldName)
+                        .ToList();
+
+                    if (fieldFilters?.Count > 0)
+                    {
+                        fieldCombined = null;
+                        fieldExpressions.Add(fieldFilters[0], null);
+                        foreach (FilterInput filterInput in fieldFilters)
+                        {
+                            if (filterInput != null)
+                            {
+                                columnNameProperty = Expression.Property(pe, sourceProperties[filterInput.FieldName].Name);
+                                value = filterInput.Value;
+                                //columnValue = GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType);
+                                switch (filterInput.Operation)
+                                {
+                                    case FilterOperationEnum.gt:
+                                        e1 = Expression.GreaterThan(columnNameProperty,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                        break;
+                                    case FilterOperationEnum.gte:
+                                        e1 = Expression.GreaterThanOrEqual(columnNameProperty,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                        break;
+                                    case FilterOperationEnum.lt:
+                                        e1 = Expression.LessThan(columnNameProperty,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                        break;
+                                    case FilterOperationEnum.lte:
+                                        e1 = Expression.LessThanOrEqual(columnNameProperty,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                        break;
+                                    case FilterOperationEnum.neq:
+                                        e1 = Expression.NotEqual(columnNameProperty,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                        break;
+                                    case FilterOperationEnum.contains:
+                                        if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                            throw new Exception("Only fields of 'String' type can have 'contains' operation. FieldName: '"
+                                                + filterInput.FieldName + "'");
+                                        method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("Contains"
+                                            , new Type[] { typeof(string) });
+                                        e1 = Expression.Call(columnNameProperty, method,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                        break;
+                                    case FilterOperationEnum.notcontains:
+                                        if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                            throw new Exception("Only fields of 'String' type can have 'notcontains' operation. FieldName: '"
+                                                + filterInput.FieldName + "'");
+                                        method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("Contains"
+                                            , new Type[] { typeof(string) });
+                                        e1 = Expression.Not(Expression.Call(columnNameProperty, method,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType)));
+                                        break;
+                                    case FilterOperationEnum.startswith:
+                                        if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                            throw new Exception("Only fields of 'String' type can have 'startswith operation. FieldName: '"
+                                                + filterInput.FieldName + "'");
+                                        method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("StartsWith"
+                                            , new Type[] { typeof(string) });
+                                        e1 = Expression.Call(columnNameProperty, method,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                        break;
+                                    case FilterOperationEnum.notstartswith:
+                                        if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                            throw new Exception("Only fields of 'String' type can have 'notstartswith' operation. FieldName: '"
+                                                + filterInput.FieldName + "'");
+                                        method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("StartsWith"
+                                            , new Type[] { typeof(string) });
+                                        e1 = Expression.Not(Expression.Call(columnNameProperty, method,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType)));
+                                        break;
+                                    case FilterOperationEnum.endswith:
+                                        if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                            throw new Exception("Only fields of 'String' type can have 'endswith' operation. FieldName: '"
+                                                + filterInput.FieldName + "'");
+                                        method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("EndsWith"
+                                            , new Type[] { typeof(string) });
+                                        e1 = Expression.Call(columnNameProperty, method,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                        break;
+                                    case FilterOperationEnum.notendswith:
+                                        if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                            throw new Exception("Only fields of 'String' type can have 'notendswith' operation. FieldName: '"
+                                                + filterInput.FieldName + "'");
+                                        method = sourceProperties[filterInput.FieldName].PropertyType.GetMethod("EndsWith"
+                                            , new Type[] { typeof(string) });
+                                        e1 = Expression.Not(Expression.Call(columnNameProperty, method,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType)));
+                                        break;
+                                    case FilterOperationEnum.containsinlist:
+                                        if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                            throw new Exception("Only fields of 'String' type can have 'containsinlist' operation. FieldName: '"
+                                                + filterInput.FieldName + "'");
+                                        e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
+                                            , false, true, false, false);
+                                        break;
+                                    case FilterOperationEnum.notcontainsinlist:
+                                        if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                            throw new Exception("Only fields of 'String' type can have 'notcontainsinlist' operation. FieldName: '"
+                                                + filterInput.FieldName + "'");
+                                        e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
+                                            , true, true, false, false);
+                                        break;
+                                    case FilterOperationEnum.startswithinlist:
+                                        if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                            throw new Exception("Only fields of 'String' type can have 'startswithinlist' operation. FieldName: '"
+                                                + filterInput.FieldName + "'");
+                                        e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
+                                            , false, false, true, false);
+                                        break;
+                                    case FilterOperationEnum.notstartswithinlist:
+                                        if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                            throw new Exception("Only fields of 'String' type can have 'notstartswithinlist' operation. FieldName: '"
+                                                + filterInput.FieldName + "'");
+                                        e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
+                                            , true, false, true, false);
+                                        break;
+                                    case FilterOperationEnum.endswithinlist:
+                                        if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                            throw new Exception("Only fields of 'String' type can have 'endswithinlist' operation. FieldName: '"
+                                                + filterInput.FieldName + "'");
+                                        e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
+                                            , false, false, false, true);
+                                        break;
+                                    case FilterOperationEnum.notendswithinlist:
+                                        if (!(sourceProperties[filterInput.FieldName].PropertyType.FullName.Contains("String")))
+                                            throw new Exception("Only fields of 'String' type can have 'notendswithinlist' operation. FieldName: '"
+                                                + filterInput.FieldName + "'");
+                                        e1 = GetCombinedStringNonEqualInListExpressions(filterInput, sourceProperties, columnNameProperty
+                                            , true, false, false, true);
+                                        break;
+                                    case FilterOperationEnum.inlist:
+                                        string strValue = Convert.ToString(value);
+                                        if (!string.IsNullOrEmpty(strValue))
+                                        {
+                                            var inList = GetListForInOperationFromValue(strValue,
+                                                sourceProperties[filterInput.FieldName], pe, out method, out Expression propExpression);
+                                            if (inList != null && method != null)
+                                                e1 = Expression.Call(Expression.Constant(inList), method, propExpression);
+                                        }
+                                        break;
+                                    case FilterOperationEnum.notinlist:
+                                        string strValue2 = Convert.ToString(value);
+                                        if (!string.IsNullOrEmpty(strValue2))
+                                        {
+                                            var inList = GetListForInOperationFromValue(strValue2,
+                                                sourceProperties[filterInput.FieldName], pe, out method, out Expression propExpression);
+                                            if (inList != null && method != null)
+                                                e1 = Expression.Not(
+                                                    Expression.Call(Expression.Constant(inList), method, propExpression));
+                                        }
+                                        break;
+                                    default:
+                                        e1 = Expression.Equal(columnNameProperty,
+                                            GetConstantColumnValueExpression(value, sourceProperties[filterInput.FieldName].PropertyType));
+                                        break;
+                                }
+                                fieldCombined = GetCombinedExpression(fieldCombined, e1, filterInput);
+                            } // End of if (filterInput != null)
+                        } // End of foreach (FilterInput filterInput in fieldFilters)
+                        fieldExpressions[fieldExpressions.Keys.Last()] = fieldCombined;
+                    } // End of if (fieldFilters?.Count > 0)
+                } // End of foreach (var fieldName in distinctFieldNames)
+                foreach (FilterInput fieldFilter in fieldExpressions.Keys)
+                {
+                    combined = GetCombinedExpression(combined, fieldExpressions[fieldFilter], fieldFilter);
+                }
+            } // End of if (distinctFieldNames?.Count > 0)
+
+            return combined;
+        }
+
+        private static Dictionary<string, PropertyInfo> GetSourcePropertiesByFilterGroups<T>
+            (List<FilterGroupInput> FilterGroups)
+        {
+            Dictionary<string, PropertyInfo> sourceProperties = new Dictionary<string, PropertyInfo>()
+                , groupProperties, filterProperties;
+
+            foreach (var filterGroup in FilterGroups)
+            {
+                groupProperties = null;
+                filterProperties = null;
+                if (filterGroup?.ChildGroups?.Count > 0)
+                {
+                    groupProperties = GetSourcePropertiesByFilterGroups<T>(filterGroup.ChildGroups);
+                    if (groupProperties?.Count > 0)
+                    {
+                        foreach (var groupProp in groupProperties)
+                        {
+                            if (!(bool)sourceProperties?.ContainsKey(groupProp.Key))
+                            {
+                                sourceProperties.Add(groupProp.Key, groupProp.Value);
+                            }
+                        }
+                    }
+                }
+                if (filterGroup?.Filters?.Count > 0)
+                {
+                    filterProperties = GetSourcePropertiesByFilters<T>(filterGroup.Filters);
+                    if (filterProperties?.Count > 0)
+                    {
+                        foreach (var filterProp in filterProperties)
+                        {
+                            if (!(bool)sourceProperties?.ContainsKey(filterProp.Key))
+                            {
+                                sourceProperties.Add(filterProp.Key, filterProp.Value);
+                            }
+                        }
+                    }
+                }
+            }
+
+            return sourceProperties;
+        }
+
+        private static Dictionary<string, PropertyInfo> GetSourcePropertiesByFilters<T>
+            (List<FilterInput> Filters)
+        {
+            Dictionary<string, PropertyInfo> sourceProperties = new Dictionary<string, PropertyInfo>();
+
+            var sPropertiesInner = Filters
+                    .DistinctBy(x => x.FieldName)
+                .ToDictionary(filter => filter.FieldName,
+                    filter => typeof(T).GetProperty(ToTitleCase(filter.FieldName)));
+            if (sPropertiesInner?.Count > 0)
+            {
+                foreach (var sPropInner in sPropertiesInner)
+                {
+                    if (sPropInner.Value != null && !(bool)sourceProperties?.ContainsKey(sPropInner.Key))
+                        sourceProperties.Add(sPropInner.Key, sPropInner.Value);
+                }
+            }
+            if (sourceProperties == null || sourceProperties.Count == 0)
+                throw new Exception
+                    ($"Filters can't be empty. Either provide filters or remove 'search' argument");// on type {context.ReturnType.GetType().GenericTypeArguments[0].Name}");
+            var nullProps = sourceProperties.Where(x => x.Value == null).FirstOrDefault();
+            if (!nullProps.Equals(default(KeyValuePair<string, PropertyInfo>)))
+                throw new Exception
+                    ($"Invalid Filter: filed name '{nullProps.Key}' doesn't exists ");//in the type {context.ReturnType.GetType().GenericTypeArguments[0].Name}.");
+
+            return sourceProperties;
         }
 
         private static Expression GetCombinedStringNonEqualInListExpressions(FilterInput filterInput, 

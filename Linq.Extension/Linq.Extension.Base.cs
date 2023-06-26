@@ -13,6 +13,7 @@ namespace Linq.Extension.Filter
     public class FilterGroupInput
     {
         public FilterLogicEnum Logic { get; set; }
+        public List<FilterGroupInput> ChildGroups { get; set; }
         public List<FilterInput> Filters { get; set; }
     }
     public class SearchInput
