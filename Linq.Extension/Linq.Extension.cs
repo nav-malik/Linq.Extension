@@ -140,6 +140,13 @@ namespace Linq.Extension
                         if (searchInput?.FilterGroups?.Count > 0 )
                         {
                             sourceProperties = GetSourcePropertiesByFilterGroups<T>(searchInput.FilterGroups);
+                            if (sourceProperties?.Count > 0 && pe != null)
+                            {
+                                combined = GetCombinedExpressionForFilterGroups(FilterGroups: searchInput.FilterGroups,
+                                    sourceProperties: sourceProperties, pe: pe);
+                            } // End of if (searchInput?.FilterGroups?.Count > 0)
+                            else
+                                combined = null;
                         }
                     }
                     //else if (key != "pagination")
@@ -157,13 +164,7 @@ namespace Linq.Extension
                             combined = GetCombinedExpression(combined, e1, null);
                         }
                     }
-                    if (searchInput?.FilterGroups?.Count > 0 && sourceProperties?.Count > 0 && pe != null)
-                    {
-                        combined = GetCombinedExpressionForFilterGroups(FilterGroups: searchInput.FilterGroups,
-                            sourceProperties: sourceProperties, pe: pe);
-                    } // End of if (searchInput?.FilterGroups?.Count > 0)
-                    else
-                        combined = null;
+                    
                 }
             }
             return combined;
@@ -188,17 +189,19 @@ namespace Linq.Extension
                 }
                 if (filterGroup?.Filters?.Count > 0)
                 {
-                    filterCombined = GetCombinedExpressionForFilters(filterGroup.Filters, sourceProperties, pe);
-                    if (groupCombined != null && filterCombined != null)
-                        combined = GetGroupCombinedExpression(groupCombined, filterCombined,
-                            filterGroup.Filters[0].Logic);
-                    else if (groupCombined != null && filterCombined == null)
-                        combined = groupCombined;
-                    else if (groupCombined == null && filterCombined != null)
-                        combined = filterCombined;
-                    else
-                        combined = null;
+                    filterCombined = GetCombinedExpressionForFilters(filterGroup.Filters, sourceProperties, pe);                    
                 } // End of if (filterGroup?.Filters?.Count > 0)
+
+                if (groupCombined != null && filterCombined != null)
+                    combined = GetGroupCombinedExpression(groupCombined, filterCombined,
+                        filterGroup.Filters[0].Logic);
+                else if (groupCombined != null && filterCombined == null)
+                    combined = groupCombined;
+                else if (groupCombined == null && filterCombined != null)
+                    combined = filterCombined;
+                else
+                    combined = null;
+
                 filterGroupExpressions.Add(groupIndex, combined);
 
             } // End of for (int groupIndex = 0; groupIndex < searchInput.FilterGroups.Count; groupIndex++)
