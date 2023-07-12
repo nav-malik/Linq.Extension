@@ -649,10 +649,12 @@ namespace Linq.Extension
                     switch (logic)
                     {
                         case FilterLogicEnum.or:
-                            first = Expression.Or(first, second);
+                            first = BinaryExpression.OrElse(first, second);
+                            //first = Expression.Or(first, second);
                             break;
                         default:
-                            first = Expression.And(first, second);
+                            first = BinaryExpression.AndAlso(first, second);
+                            //first = Expression.And(first, second);
                             break;
                     }
                 }
@@ -687,10 +689,12 @@ namespace Linq.Extension
                         switch (filterInput.Logic)
                         {
                             case FilterLogicEnum.or:
-                                first = Expression.Or(first, second);
+                                first = BinaryExpression.OrElse(first, second);
+                                //first = Expression.Or(first, second);
                                 break;
                             default:
-                                first = Expression.And(first, second);
+                                first = BinaryExpression.AndAlso(first, second);
+                                //first = Expression.And(first, second);
                                 break;
                         }
                     }

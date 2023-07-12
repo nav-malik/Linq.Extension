@@ -9,8 +9,11 @@
     <Copyright>Nav Malik</Copyright>
     <Description>Linq Extension to provide Dynamic Where Condition with Groups, Child Groups &amp; Filters and Dynamic Select, Dynamic Take If Positive Number, Pagination and Nesting Predicates with parenthesis. Use SearchInput class for Dynamic Where and PaginationInput for pagination (take, skip and sort).</Description>
     <PackageTags>Linq Extension DynamicSelect DynamicWhere Linq.Entities LinqEntity Linq.Entity Nesting Predicates NestingPredicates</PackageTags>
-    <Version>3.1.0.0</Version>
-    <PackageReleaseNotes>Added Child Groups in FilterGroupInput this will allow to create nested 'Parenthesis' () in generated SQL queries. ChildGroups is type of List of FilterGroupInput so it'll generated 'Parenthesis' () with in 'Parenthesis' ()  recursively.
+    <Version>3.2.0.0</Version>
+    <PackageReleaseNotes>Updated Dynamic Where Predicate. Now generated sql will not have case statements in where condition.
+
+*************** ----------- ***************
+Added Child Groups in FilterGroupInput this will allow to create nested 'Parenthesis' () in generated SQL queries. ChildGroups is type of List of FilterGroupInput so it'll generated 'Parenthesis' () with in 'Parenthesis' ()  recursively.
 Excluded the proprties which doesn't exists in the resultset in SortBy extension method. Also, in case of exception return the source.
 Fix the sort on nullable fields.
 Added dynamic Group By with list of strings as names of the fields Group By on.
