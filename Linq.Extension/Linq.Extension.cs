@@ -13,6 +13,7 @@ using Newtonsoft.Json;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
+using System.Net.Http.Headers;
 
 namespace Linq.Extension
 {
@@ -22,6 +23,215 @@ namespace Linq.Extension
         {
             
         }
+
+        // Start of Selection Methods for Actual Type instead of Dynamic Type.
+        public static Expression<Func<T, T>> DynamicSelectGenerator<T>(IEnumerable<string> fieldsNames,
+            bool fetchParentEntityAlongWithParentlId = false)
+        {
+            var sourceProperties = GetSelectionSetAsDictionaryOfProperties<T>(fieldsNames, fetchParentEntityAlongWithParentlId);
+
+            ParameterExpression sourceItem = Expression.Parameter(typeof(T), "t");
+
+            IEnumerable<MemberBinding> bindings = typeof(T).GetProperties()
+                .Where(x => sourceProperties.ContainsKey(x.Name))
+                .Select(p => Expression.Bind(p, Expression.Property(sourceItem, sourceProperties[p.Name]))).OfType<MemberBinding>();
+
+            var selector = Expression.Lambda<Func<T, T>>(
+                Expression.MemberInit(
+                    Expression.New(typeof(T))
+                    , bindings)
+                , sourceItem);
+
+            return selector;
+        }
+        public static Expression<Func<T, T>> DynamicSelectGenerator<T>(string fieldsNames,
+            bool fetchParentEntityAlongWithParentlId = false)
+        {
+            var listFieldNames = DelimitedStringToList(fieldsNames);
+            return DynamicSelectGenerator<T>(listFieldNames, fetchParentEntityAlongWithParentlId);
+        }
+
+        public static List<string> DelimitedStringToList(string delimitedString, char delimiter = ',')
+        {
+            if (string.IsNullOrWhiteSpace(delimitedString)) return null;
+
+            return delimitedString.Split(delimiter).Select(x => x.Trim()).ToList();
+        }
+
+        public static IDictionary<string, string> GetDictionaryOfFieldAndDelimitedStringValues<T>
+            (List<T> list, string fieldsNames, char delimiter = ',')
+        {
+            Dictionary<string, string> dicFieldDelimitedValue = new Dictionary<string, string>();
+            var lstFieldName = DelimitedStringToList(fieldsNames, delimiter);
+
+            if (list?.Count > 0 && lstFieldName?.Count > 0)
+            {
+                foreach (var field in lstFieldName)
+                {
+                    dicFieldDelimitedValue.Add(field, ConvertListOfValuesToDelimitedString(list, field));
+                }
+            }
+            return dicFieldDelimitedValue;
+        }
+
+        public static string ConvertListOfValuesToDelimitedString<T>(List<T> list, string columnName, char delimiter = ',')
+        {
+            string colName = ToTitleCase(columnName);
+            var propertyInfo = typeof(T).GetProperty(colName);
+            if (propertyInfo == null)
+            {
+                throw new ArgumentNullException($"Property '{colName}' not found on type {typeof(T)}.");
+            }
+
+            Type t = propertyInfo.PropertyType.GetUnderlyingType();
+
+            string delimitedString = string.Empty;
+
+            if (t.FullName.ToLower().Contains("int64"))
+            {
+                if(propertyInfo.PropertyType.FullName.ToLower().Contains("nullable"))
+                    delimitedString = string.Join(delimiter, 
+                        list.DistinctBy<T, Nullable<Int64>>(colName)
+                        .Select(x => GetPropertValue<T, Nullable<Int64>>(x, colName).ToString())
+                        .ToArray());
+                else
+                    delimitedString = string.Join(delimiter,
+                         list.DistinctBy<T, Int64>(colName)
+                        .Select(x => GetPropertValue<T, Int64>(x, colName).ToString())
+                        .ToArray());
+            }
+            else if (t.FullName.ToLower().Contains("double"))
+            {
+                if (propertyInfo.PropertyType.FullName.ToLower().Contains("nullable"))
+                    delimitedString = string.Join(delimiter,
+                        list.DistinctBy<T, Nullable<double>>(colName)
+                        .Select(x => GetPropertValue<T, Nullable<double>>(x, colName).ToString())
+                        .ToArray());
+                else
+                    delimitedString = string.Join(delimiter,
+                         list.DistinctBy<T, double>(colName)
+                        .Select(x => GetPropertValue<T, double>(x, colName).ToString())
+                        .ToArray());
+            }
+            else if (t.FullName.ToLower().Contains("float"))
+            {
+                if (propertyInfo.PropertyType.FullName.ToLower().Contains("nullable"))
+                    delimitedString = string.Join(delimiter,
+                        list.DistinctBy<T, Nullable<float>>(colName)
+                        .Select(x => GetPropertValue<T, Nullable<float>>(x, colName).ToString())
+                        .ToArray());
+                else
+                    delimitedString = string.Join(delimiter,
+                         list.DistinctBy<T, float>(colName)
+                        .Select(x => GetPropertValue<T, float>(x, colName).ToString())
+                        .ToArray());
+            }
+            else if (t.FullName.ToLower().Contains("int32"))
+            {
+                if (propertyInfo.PropertyType.FullName.ToLower().Contains("nullable"))
+                    delimitedString = string.Join(delimiter,
+                        list.DistinctBy<T, Nullable<Int32>>(colName)
+                        .Select(x => GetPropertValue<T, Nullable<Int32>>(x, colName).ToString())
+                        .ToArray());
+                else
+                    delimitedString = string.Join(delimiter,
+                         list.DistinctBy<T, Int32>(colName)
+                        .Select(x => GetPropertValue<T, Int32>(x, colName).ToString())
+                        .ToArray());
+            }
+            else if (t.FullName.ToLower().Contains("int16"))
+            {
+                if (propertyInfo.PropertyType.FullName.ToLower().Contains("nullable"))
+                    delimitedString = string.Join(delimiter,
+                        list.DistinctBy<T, Nullable<Int16>>(colName)
+                        .Select(x => GetPropertValue<T, Nullable<Int16>>(x, colName).ToString())
+                        .ToArray());
+                else
+                    delimitedString = string.Join(delimiter,
+                         list.DistinctBy<T, Int16>(colName)
+                        .Select(x => GetPropertValue<T, Int16>(x, colName).ToString())
+                        .ToArray());
+            }
+            else if (t.FullName.ToLower().Contains("int"))
+            {
+                if (propertyInfo.PropertyType.FullName.ToLower().Contains("nullable"))
+                    delimitedString = string.Join(delimiter,
+                        list.DistinctBy<T, Nullable<int>>(colName)
+                        .Select(x => GetPropertValue<T, Nullable<int>>(x, colName).ToString())
+                        .ToArray());
+                else
+                    delimitedString = string.Join(delimiter,
+                         list.DistinctBy<T, int>(colName)
+                        .Select(x => GetPropertValue<T, int>(x, colName).ToString())
+                        .ToArray());
+            }
+            else if (t.FullName.ToLower().Contains("bool"))
+            {
+                if (propertyInfo.PropertyType.FullName.ToLower().Contains("nullable"))
+                    delimitedString = string.Join(delimiter,
+                        list.DistinctBy<T, Nullable<bool>>(colName)
+                        .Select(x => GetPropertValue<T, Nullable<bool>>(x, colName).ToString())
+                        .ToArray());
+                else
+                    delimitedString = string.Join(delimiter,
+                         list.DistinctBy<T, bool>(colName)
+                        .Select(x => GetPropertValue<T, bool>(x, colName).ToString())
+                        .ToArray());
+            }
+            else if (t.FullName.ToLower().Contains("string"))
+            {
+                delimitedString = string.Join(delimiter,
+                     list.DistinctBy<T, string>(colName)
+                    .Select(x => GetPropertValue<T, string>(x, colName).ToString())
+                    .ToArray());
+            }
+            else if (t.FullName.ToLower().Contains("date"))
+            {
+                if (propertyInfo.PropertyType.FullName.ToLower().Contains("nullable"))
+                    delimitedString = string.Join(delimiter,
+                        list.DistinctBy<T, Nullable<DateTime>>(colName)
+                        .Select(x => GetPropertValue<T, Nullable<DateTime>>(x, colName).ToString())
+                        .ToArray());
+                else
+                    delimitedString = string.Join(delimiter,
+                         list.DistinctBy<T, DateTime>(colName)
+                        .Select(x => GetPropertValue<T, DateTime>(x, colName).ToString())
+                        .ToArray());
+            }
+
+            return delimitedString;
+        }
+
+        public static IEnumerable<TSource> DistinctBy<TSource, TKey>(this IEnumerable<TSource> source, string columnName)
+        {
+            var parameterExpression = Expression.Parameter(typeof(TSource), "x");
+
+            var propertyInfo = typeof(TSource).GetProperty(columnName);
+            if (propertyInfo == null)
+            {
+                throw new ArgumentNullException($"Property '{columnName}' not found on type {typeof(TSource)}.");
+            }
+
+            Expression<Func<TSource, TKey>> keySelectorExpression = Expression.Lambda<Func<TSource, TKey>>(
+                Expression.Property(parameterExpression, columnName)
+                , parameterExpression);
+
+            return source.DistinctBy(keySelectorExpression.Compile());
+        }
+
+        public static TValue GetPropertValue<TSource, TValue>(TSource obj, string propertyName)
+        {
+            var propertyInfo = typeof(TSource).GetProperty(propertyName);
+            if (propertyInfo == null)
+            {
+                throw new ArgumentNullException($"Property '{propertyName}' not found on type {typeof(TSource)}.");
+            }
+
+            return (TValue) propertyInfo.GetValue(obj);
+        }
+
+        // End of Selection Methods for Actual Type instead of Dynamic Type.
+
         public static Expression<Func<TSource, T>> DynamicSelectGenerator<TSource, T>(string Fields = "")
         {
             string[] EntityFields;
