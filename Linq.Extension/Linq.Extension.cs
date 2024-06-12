@@ -24,7 +24,194 @@ namespace Linq.Extension
             
         }
 
+        #region DistinctBy Select Extension Methods.
+        public static IQueryable<T> DistinctBySelect<T>(this IQueryable<T> source, IEnumerable<string> fieldsNames)
+        {
+            var selector = DynamicSelectGenerator<T>(fieldsNames);
+
+            if (selector != null)
+                return source.Select(selector).Distinct();
+            else
+                return source.Select(x => x).Distinct();
+        }
+
+        public static IQueryable<T> DistinctBySelect<T>(this IQueryable<T> source, string fieldsNames)
+        {
+            var selector = DynamicSelectGenerator<T>(fieldsNames);
+
+            if (selector != null)
+                return source.Select(selector).Distinct();
+            else
+                return source.Select(x => x).Distinct();
+        }
+        #endregion
+
+        #region Pagination, Sort, Take and Distinct Methods
+
+        public static IQueryable<T> Pagination<T>(this IQueryable<T> source, IDictionary<string, object> parameters,
+            bool distinct = false)
+        {
+            PaginationInput pagingState = null;
+
+            source = source.Distinct(distinct);
+
+            if (parameters != null && parameters.Count > 0)
+            {
+                foreach (var key in parameters.Keys)
+                    if (parameters[key] != null
+                        && (parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Pagination.PaginationInput"
+                        || key.ToLower() == "pagination"
+                        || parameters[key] is PaginationInput))
+                    {
+                        pagingState = JsonConvert.DeserializeObject<PaginationInput>(JsonConvert.SerializeObject(parameters["pagination"]));
+                        break;
+                    }
+                //pagingState = parameters["pagination"].GetPropertyValue<PaginationInput>();
+            }
+            if (pagingState == null)
+                return source;
+            else
+            {
+                return source
+                    .SortBy(pagingState.Sorts)
+                    .SkipIfPositiveNumber(pagingState.Skip)
+                    .TakeIfPositiveNumber(pagingState.Take);
+            }
+        }
+
+        public static IQueryable<T> Pagination<T>(this IQueryable<T> source, PaginationInput pagination,
+            bool distinct = false)
+        {
+            source = source.Distinct(distinct);
+            
+            if (pagination == null)
+                return source;
+            else
+            {
+                return source
+                    .SortBy(pagination.Sorts)
+                    .SkipIfPositiveNumber(pagination.Skip)
+                    .TakeIfPositiveNumber(pagination.Take);
+            }
+        }
+
+        public static IQueryable<T> Distinct<T> (this IQueryable<T> source, bool distinct = true)
+        {
+            if (distinct)
+                source = source.Distinct();
+            return source;
+        }
+        public static IQueryable<T> SortBy<T>(this IQueryable<T> source, List<SortInput> sorts)
+        {
+            try
+            {
+                if (sorts != null && sorts.Count > 0)
+                {
+                    MethodInfo method;
+                    SortInput sort = null;
+                    string prefix = "Order";
+                    Expression exprNext = null;
+                    PropertyInfo property = null;
+                    Type propertyType = null;
+                    MethodInfo methodSortExpr = null;
+                    for (int i = 0; i < sorts.Count; i++)
+                    {
+                        prefix = i < 1 ? "Order" : "Then";
+                        sort = sorts[i];
+                        property = typeof(T).GetProperty(ToTitleCase(sort.FieldName));
+
+                        if (property != null)
+                        {
+                            //if (property.PropertyType.IsGenericType)
+                            //    propertyType = Nullable.GetUnderlyingType(property.PropertyType);
+                            //else
+                            propertyType = property.PropertyType;
+                            if (!string.IsNullOrEmpty(sort.FieldName))
+                            {
+
+                                switch (sort.Direction)
+                                {
+                                    case SortDirectionEnum.desc:
+                                        method = typeof(Queryable).GetMethods()
+                                        .Where(x => x.Name == prefix + "ByDescending")
+                                        .First().MakeGenericMethod(typeof(T), propertyType);
+                                        break;
+                                    default:
+                                        method = typeof(Queryable).GetMethods()
+                                        .Where(x => x.Name == prefix + "By")
+                                        .First().MakeGenericMethod(typeof(T), propertyType);
+                                        break;
+                                }
+                                if (i == 0)
+                                {
+                                    exprNext = source.Expression;
+                                }
+                                methodSortExpr = typeof(LinqDynamicExtension)
+                                    .GetMethod("GetSortExpression", BindingFlags.NonPublic | BindingFlags.Static)
+                                    .MakeGenericMethod(typeof(T), propertyType);
+                                exprNext = Expression.Call(
+                                            null,
+                                            method,
+                                            exprNext,
+                                            (Expression)methodSortExpr.Invoke(null, new string[] { sort.FieldName }));
+                            }
+                        }
+                    }
+                    return source.Provider.CreateQuery<T>(exprNext);
+                }
+                else
+                    return source;
+            }
+            catch (Exception Ex)
+            {
+                return source;
+            }
+        }
+        public static IQueryable<T> TakeIfPositiveNumber<T>(this IQueryable<T> source, int? count)
+        {
+            if (count.HasValue && count.Value > 0)
+            {
+                var method = typeof(Queryable).GetMethods()
+                    .Where(x => x.Name == "Take")
+                    .First().MakeGenericMethod(typeof(T));
+
+                return source.Provider.CreateQuery<T>(
+                Expression.Call(
+                    null,
+                    method,
+                    source.Expression,
+                    Expression.Constant(count))
+                    );
+            }
+            else
+                return source;
+        }
+        public static IQueryable<T> SkipIfPositiveNumber<T>(this IQueryable<T> source, int? count)
+        {
+            if (count.HasValue && count.Value > 0)
+            {
+                var method = typeof(Queryable).GetMethods()
+                    .Where(x => x.Name == "Skip")
+                    .First().MakeGenericMethod(typeof(T));
+
+                return source.Provider.CreateQuery<T>(
+                Expression.Call(
+                    null,
+                    method,
+                    source.Expression,
+                    Expression.Constant(count))
+                    );
+            }
+            else
+                return source;
+        }
+
+
+        #endregion
+        
+
         // Start of Selection Methods for Actual Type instead of Dynamic Type.
+
 
         public static IQueryable<dynamic> SelectAsAnomouysType<T>(this IQueryable<T> source, IEnumerable<string> fieldsNames,
             bool fetchParentEntityAlongWithParentlId = false)
@@ -45,7 +232,7 @@ namespace Linq.Extension
             if (selector != null)
                 return source.Select(selector);
             else
-                return source;
+                return source.Select(x => x);
         }
 
         public static IQueryable<T> Select<T>(this IQueryable<T> source, string fieldsNames,
@@ -56,7 +243,7 @@ namespace Linq.Extension
             if (selector != null)
                 return source.Select(selector);
             else
-                return source;
+                return source.Select(x => x);
         }
 
         public static Expression<Func<T, T>> DynamicSelectGenerator<T>(IEnumerable<string> fieldsNames,
@@ -1138,137 +1325,7 @@ namespace Linq.Extension
             var exprSort = Expression.Property(pe, propertyName);
             return Expression.Lambda<Func<T, R>>(exprSort, new ParameterExpression[] { pe });
         }
-        public static IQueryable<T> SortBy<T>(this IQueryable<T> source, List<SortInput> sorts)
-        {
-            try
-            {
-                if (sorts != null && sorts.Count > 0)
-                {
-                    MethodInfo method;
-                    SortInput sort = null;
-                    string prefix = "Order";
-                    Expression exprNext = null;
-                    PropertyInfo property = null;
-                    Type propertyType = null;
-                    MethodInfo methodSortExpr = null;
-                    for (int i = 0; i < sorts.Count; i++)
-                    {
-                        prefix = i < 1 ? "Order" : "Then";
-                        sort = sorts[i];
-                        property = typeof(T).GetProperty(ToTitleCase(sort.FieldName));
-                        
-                        if (property != null)
-                        {
-                            //if (property.PropertyType.IsGenericType)
-                            //    propertyType = Nullable.GetUnderlyingType(property.PropertyType);
-                            //else
-                            propertyType = property.PropertyType;
-                            if (!string.IsNullOrEmpty(sort.FieldName))
-                            {
-
-                                switch (sort.Direction)
-                                {
-                                    case SortDirectionEnum.desc:
-                                        method = typeof(Queryable).GetMethods()
-                                        .Where(x => x.Name == prefix + "ByDescending")
-                                        .First().MakeGenericMethod(typeof(T), propertyType);
-                                        break;
-                                    default:
-                                        method = typeof(Queryable).GetMethods()
-                                        .Where(x => x.Name == prefix + "By")
-                                        .First().MakeGenericMethod(typeof(T), propertyType);
-                                        break;
-                                }
-                                if (i == 0)
-                                {
-                                    exprNext = source.Expression;
-                                }
-                                methodSortExpr = typeof(LinqDynamicExtension)
-                                    .GetMethod("GetSortExpression", BindingFlags.NonPublic | BindingFlags.Static)
-                                    .MakeGenericMethod(typeof(T), propertyType);
-                                exprNext = Expression.Call(
-                                            null,
-                                            method,
-                                            exprNext,
-                                            (Expression)methodSortExpr.Invoke(null, new string[] { sort.FieldName }));
-                            }
-                        }
-                    }
-                    return source.Provider.CreateQuery<T>(exprNext);
-                }
-                else
-                    return source;
-            }
-            catch(Exception Ex)
-            {
-                return source;
-            }
-        }
-        public static IQueryable<T> TakeIfPositiveNumber<T>(this IQueryable<T> source, int? count)
-        {
-            if (count.HasValue && count.Value > 0)
-            {
-                var method = typeof(Queryable).GetMethods()
-                    .Where(x => x.Name == "Take")
-                    .First().MakeGenericMethod(typeof(T));
-
-                return source.Provider.CreateQuery<T>(
-                Expression.Call(
-                    null,
-                    method,
-                    source.Expression,
-                    Expression.Constant(count))
-                    );
-            }
-            else
-                return source;
-        }
-        public static IQueryable<T> SkipIfPositiveNumber<T>(this IQueryable<T> source, int? count)
-        {
-            if (count.HasValue && count.Value > 0)
-            {
-                var method = typeof(Queryable).GetMethods()
-                    .Where(x => x.Name == "Skip")
-                    .First().MakeGenericMethod(typeof(T));
-
-                return source.Provider.CreateQuery<T>(
-                Expression.Call(
-                    null,
-                    method,
-                    source.Expression,
-                    Expression.Constant(count))
-                    );
-            }
-            else
-                return source;
-        }
-
-        public static IQueryable<T> Pagination<T>(this IQueryable<T> source, IDictionary<string, object> parameters)
-        {
-            PaginationInput pagingState = null;
-            if (parameters != null && parameters.Count > 0)
-            {
-                foreach (var key in parameters.Keys)
-                    if (parameters[key] != null
-                        && (parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Pagination.PaginationInput"
-                        || key.ToLower() == "pagination"
-                        || parameters[key] is PaginationInput))
-                    {
-                        pagingState = JsonConvert.DeserializeObject<PaginationInput>(JsonConvert.SerializeObject(parameters["pagination"]));
-                        break;
-                    }
-                //pagingState = parameters["pagination"].GetPropertyValue<PaginationInput>();
-            }
-            if (pagingState == null)
-                return source;
-            else
-            {
-                return source
-                    .SortBy(pagingState.Sorts)
-                    .SkipIfPositiveNumber(pagingState.Skip)
-                    .TakeIfPositiveNumber(pagingState.Take);
-            }
-        }
+       
 
         public static Expression<Func<TSource, dynamic>> GetDynamicGroupBy<TSource>(IEnumerable<string> groupFieldNames)
         {

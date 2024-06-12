@@ -1,3 +1,5 @@
+using Linq.Extension.Filter;
+using Linq.Extension.Pagination;
 using System.Collections.Generic;
 
 namespace Linq.Extension.Filter
@@ -70,5 +72,26 @@ namespace Linq.Extension.Pagination
     {
         asc,
         desc
+    }
+}
+
+namespace Linq.Extension.Unique
+{
+    public class DistinctByInput
+    {
+        /// <summary>
+        /// Comma (,) separated field names.
+        /// </summary>
+        public string FieldNames { get; set; }
+
+        /// <summary>
+        /// Provide search object to filter data for DistinctBy.
+        /// </summary>
+        public SearchInput SearchInput { get; set; }
+
+        /// <summary>
+        /// Provide pagination object to apply sort, take and skip on data for DistinctBy.
+        /// </summary>
+        public PaginationInput Pagination {  get; set; }
     }
 }
