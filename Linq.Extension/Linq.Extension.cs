@@ -25,6 +25,40 @@ namespace Linq.Extension
         }
 
         // Start of Selection Methods for Actual Type instead of Dynamic Type.
+
+        public static IQueryable<dynamic> SelectAsAnomouysType<T>(this IQueryable<T> source, IEnumerable<string> fieldsNames,
+            bool fetchParentEntityAlongWithParentlId = false)
+        {
+            var selector = DynamicSelectGeneratorAnomouysType<T>(fieldsNames, fetchParentEntityAlongWithParentlId);
+
+            if (selector != null)
+                return source.Select(selector);
+            else
+                return (IQueryable<dynamic>)source;
+        }
+
+        public static IQueryable<T> Select<T>(this IQueryable<T> source, IEnumerable<string> fieldsNames,
+            bool fetchParentEntityAlongWithParentlId = false)
+        {
+            var selector = DynamicSelectGenerator<T>(fieldsNames, fetchParentEntityAlongWithParentlId);
+
+            if (selector != null)
+                return source.Select(selector);
+            else
+                return source;
+        }
+
+        public static IQueryable<T> Select<T>(this IQueryable<T> source, string fieldsNames,
+            bool fetchParentEntityAlongWithParentlId = false)
+        {
+            var selector = DynamicSelectGenerator<T>(fieldsNames, fetchParentEntityAlongWithParentlId);
+
+            if (selector != null)
+                return source.Select(selector);
+            else
+                return source;
+        }
+
         public static Expression<Func<T, T>> DynamicSelectGenerator<T>(IEnumerable<string> fieldsNames,
             bool fetchParentEntityAlongWithParentlId = false)
         {

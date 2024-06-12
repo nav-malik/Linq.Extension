@@ -9,8 +9,10 @@
     <Copyright>Nav Malik</Copyright>
     <Description>Linq Extension to provide Dynamic Where Condition with Groups, Child Groups &amp; Filters and Dynamic Select, Dynamic Take If Positive Number, Pagination and Nesting Predicates with parenthesis. Use SearchInput class for Dynamic Where and PaginationInput for pagination (take, skip and sort).</Description>
     <PackageTags>Linq Extension DynamicSelect DynamicWhere Linq.Entities LinqEntity Linq.Entity Nesting Predicates NestingPredicates</PackageTags>
-    <Version>3.3.0.0</Version>
-    <PackageReleaseNotes>3.3.0 Added Dynamic Select Generator expression which return actual type instead of Dynamic type, also added IEnumerable DistinctBy.
+    <Version>3.3.1</Version>
+    <PackageReleaseNotes>3.3.1 Added Select extension methods for Dynamic Select Generator as actual type of Entity or Dynamic type.
+***************-----------****************
+3.3.0 Added Dynamic Select Generator expression which return actual type instead of Dynamic type, also added IEnumerable DistinctBy.
 ***************-----------****************
 Updated Dynamic Where Predicate. Now generated sql will not have case statements in where condition.
 
