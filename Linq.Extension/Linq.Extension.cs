@@ -14,6 +14,8 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using System.Net.Http.Headers;
+using Linq.Extension.Unique;
+using Microsoft.EntityFrameworkCore;
 
 namespace Linq.Extension
 {
@@ -23,6 +25,202 @@ namespace Linq.Extension
         {
             
         }
+
+        #region Where Extension Methods and Dynamic Where Predicate for Lists
+
+        public static Expression CombinedExpression(Expression first, Expression second, bool isAndLogic = true)
+        {
+            bool isOriginalFirstNull = first == null;
+            if (first == null && second != null)
+            {
+                first = second;
+                return first;
+            }
+            if (first == null)
+            {
+                first = Expression.Constant(true);
+            }
+            if (second == null)
+                second = Expression.Constant(true);
+            if (first != null && second != null)
+            {
+                if (!isAndLogic)
+                {
+                    first = BinaryExpression.OrElse(first, second);                    
+                }
+                else
+                    first = BinaryExpression.AndAlso(first, second);
+            }
+
+            return first;
+        }
+        public static Expression DynamicWhereExpressionForLists<T>(IDictionary<string, string> parameters,
+            ParameterExpression pe)
+        {
+            Expression combined = null;
+            MethodInfo method = null;
+            Expression e1 = null;
+
+            if (parameters?.Count > 0)
+            {
+                var sourceProperties = parameters.Keys
+                    .DistinctBy(x => x)
+                    .ToDictionary(x => x,
+                        x => typeof(T).GetProperty(ToTitleCase(x)));
+
+                foreach (var listValue in parameters)
+                {
+                    e1 = null;
+                    if (!string.IsNullOrWhiteSpace(listValue.Value))
+                    {
+                        var inList = GetListForInOperationFromValue(listValue.Value,
+                            sourceProperties[listValue.Key], pe, out method, out Expression propertyExpression);
+                        if (inList != null && method != null)
+                        {
+                            e1 = Expression.Call(Expression.Constant(inList), method, propertyExpression);
+                            if (e1 != null)
+                            {
+                                if (combined == null)
+                                    combined = e1;
+                                else
+                                    combined = BinaryExpression.AndAlso(combined, e1);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (combined == null)
+                combined = Expression.Constant(true);
+
+            return combined;
+        }
+
+        public static Expression<Func<T, bool>> DynamicWherePredicateForLists<T>(IDictionary<string, string> parameters)
+        {
+            ParameterExpression pe = Expression.Parameter(typeof(T), "o");                  
+
+            return Expression.Lambda<Func<T, bool>>(DynamicWhereExpressionForLists<T>(parameters, pe), new ParameterExpression[] { pe });
+        }
+
+        public static Expression GetExpressionOfEFCoreListDataFromDistinctBy<T>(DbSet<T> source, DistinctByInput distinctBy
+            , ParameterExpression pe, char delimiter =',') where T: class
+        {
+            Expression combined = null;
+
+            var list = source.GetEFCoreListDataFromDistinctBy(distinctBy);
+
+            IDictionary<string, string> parameters = GetDictionaryOfFieldAndDelimitedStringValues(list, distinctBy?.FieldNames, delimiter);
+
+            combined = DynamicWhereExpressionForLists<T>(parameters, pe);
+
+            return combined;
+        }
+
+        public static List<T> GetEFCoreListDataFromDistinctBy<T>(this DbSet<T> source,
+            DistinctByInput distinctBy) where T: class
+        {
+            var distinctByData = source
+                .AsNoTracking()
+                .Where(distinctBy?.Search)
+                .DistinctBySelect(distinctBy?.FieldNames)
+                .Pagination(distinctBy?.Pagination)
+                .ToList();
+
+            return distinctByData;
+        }
+
+        public static IQueryable<T> WhereWithDistinctBy<T>(this IQueryable<T> source, IDictionary<string, object> parameters,
+            DbSet<T> entity, DistinctByInput distinctBy, char delimiter = ',') where T: class
+        {
+            ParameterExpression pe = Expression.Parameter(typeof(T), "o");
+            Expression combined = GetExpressionOfEFCoreListDataFromDistinctBy(entity, distinctBy, pe, delimiter);
+            Expression e1 = GetDynamicWherePredicate<T>(parameters, pe);
+
+            combined = GetCombinedExpression(combined, e1);
+
+            if (combined != null)
+                return source.Where(Expression.Lambda<Func<T, bool>>(combined, new ParameterExpression[] { pe }));
+            else
+                return source;
+        }
+
+        public static IQueryable<T> Where<T>(this IQueryable<T> source, IDictionary<string, string> parameters)
+        {
+            var selector = DynamicWherePredicateForLists<T>(parameters);
+
+            if (selector != null)
+                return source.Where(selector);
+            else
+                return source;
+        }
+
+        public static IQueryable<T> Where<T, TDistinctBy>(this IQueryable<T> source, List<TDistinctBy> list,
+            string fieldNames, char delimiter =',')
+        {
+            IDictionary<string, string> parameters = GetDictionaryOfFieldAndDelimitedStringValues(list, fieldNames, delimiter);
+            var selector = DynamicWherePredicateForLists<T>(parameters);
+
+            if (selector != null)
+                return source.Where(selector);
+            else
+                return source;
+        }
+
+        public static IQueryable<T> Where<T, E>(this IQueryable<T> source, IDictionary<string, object> parameters
+            , IEnumerable<E> Ids, string IdFieldName)
+        {
+            var selector = WherePredicateWithRelationalIds<T, E>(parameters, Ids, IdFieldName);
+
+            if (selector != null)
+                return source.Where(selector);
+            else
+                return source;
+        }
+
+        public static IQueryable<T> Where<T>(this IQueryable<T> source, IDictionary<string, object> parameters)
+        {
+            var selector = DynamicWherePredicate<T>(parameters);
+
+            if (selector != null)
+                return source.Where(selector);
+            else
+                return source;
+        }
+
+        public static IQueryable<T> Where<T>(this IQueryable<T> source, SearchInput searchInput)
+        {
+            var selector = DynamicWherePredicate<T>(searchInput);
+
+            if (selector != null)
+                return source.Where(selector);
+            else
+                return source;
+        }
+        public static Expression<Func<T, bool>> DynamicWherePredicate<T>(SearchInput searchInput)
+        {
+            ParameterExpression pe = Expression.Parameter(typeof(T), "o");
+            Expression combined = null;
+
+            if (searchInput != null)
+            {
+                if (searchInput?.FilterGroups?.Count > 0)
+                {
+                    Dictionary<string, PropertyInfo>  sourceProperties = GetSourcePropertiesByFilterGroups<T>(searchInput.FilterGroups);
+                    if (sourceProperties?.Count > 0 && pe != null)
+                    {
+                        combined = GetCombinedExpressionForFilterGroups(FilterGroups: searchInput.FilterGroups,
+                            sourceProperties: sourceProperties, pe: pe);
+                    } 
+                    else
+                        combined = Expression.Constant(true);
+                }
+            }
+
+            return Expression.Lambda<Func<T, bool>>(combined, new ParameterExpression[] {pe });
+        }
+        
+        #endregion
 
         #region DistinctBy Select Extension Methods.
         public static IQueryable<T> DistinctBySelect<T>(this IQueryable<T> source, IEnumerable<string> fieldsNames)
@@ -53,7 +251,7 @@ namespace Linq.Extension
         {
             PaginationInput pagingState = null;
 
-            source = source.Distinct(distinct);
+            source = source.DistinctIf(distinct);
 
             if (parameters != null && parameters.Count > 0)
             {
@@ -82,7 +280,7 @@ namespace Linq.Extension
         public static IQueryable<T> Pagination<T>(this IQueryable<T> source, PaginationInput pagination,
             bool distinct = false)
         {
-            source = source.Distinct(distinct);
+            source = source.DistinctIf(distinct);
             
             if (pagination == null)
                 return source;
@@ -95,7 +293,7 @@ namespace Linq.Extension
             }
         }
 
-        public static IQueryable<T> Distinct<T> (this IQueryable<T> source, bool distinct = true)
+        public static IQueryable<T> DistinctIf<T> (this IQueryable<T> source, bool distinct = false)
         {
             if (distinct)
                 source = source.Distinct();
@@ -206,13 +404,10 @@ namespace Linq.Extension
                 return source;
         }
 
-
         #endregion
-        
 
-        // Start of Selection Methods for Actual Type instead of Dynamic Type.
-
-
+        #region Selection Extension Methods for Actual Type instead of Dynamic Type.
+                
         public static IQueryable<dynamic> SelectAsAnomouysType<T>(this IQueryable<T> source, IEnumerable<string> fieldsNames,
             bool fetchParentEntityAlongWithParentlId = false)
         {
@@ -451,7 +646,7 @@ namespace Linq.Extension
             return (TValue) propertyInfo.GetValue(obj);
         }
 
-        // End of Selection Methods for Actual Type instead of Dynamic Type.
+        #endregion
 
         public static Expression<Func<TSource, T>> DynamicSelectGenerator<TSource, T>(string Fields = "")
         {
@@ -540,7 +735,7 @@ namespace Linq.Extension
             }
             return Expression.Lambda<Func<T, bool>>(combined, new ParameterExpression[] { pe });
         }
-        private static Expression GetDynamicWherePredicate<T>(IDictionary<string, object> parameters, ParameterExpression pe)
+        public static Expression GetDynamicWherePredicate<T>(IDictionary<string, object> parameters, ParameterExpression pe)
         {
             //combine them with and 1=1 Like no expression
             Expression combined = null;
@@ -1133,7 +1328,7 @@ namespace Linq.Extension
                         first = second;// Expression.And(first, second);
                 }
                 else
-                    first = Expression.And(first, second);
+                    first = BinaryExpression.AndAlso(first, second);
             }
 
             return first;

@@ -87,7 +87,7 @@ namespace Linq.Extension.Unique
         /// <summary>
         /// Provide search object to filter data for DistinctBy.
         /// </summary>
-        public SearchInput SearchInput { get; set; }
+        public SearchInput Search { get; set; }
 
         /// <summary>
         /// Provide pagination object to apply sort, take and skip on data for DistinctBy.
