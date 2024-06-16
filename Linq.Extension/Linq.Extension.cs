@@ -52,7 +52,7 @@ namespace Linq.Extension
         public static IQueryable<IGrouping<T, T>> GroupBy<T>(this IQueryable<T> source, IDictionary<string, object> parameters
             , char delimiter = ',')
         {
-            var groupBy = getGroupBy(parameters);
+            var groupBy = GetGroupBy(parameters);
             var listFieldNames = DelimitedStringToList(groupBy.FieldNames, delimiter);
             return source.Where(groupBy.Search).GroupBy(listFieldNames);
         }
@@ -63,7 +63,7 @@ namespace Linq.Extension
             return source.Where(groupBy.Search).GroupBy(listFieldNames);
         }
 
-        private static GroupByInput getGroupBy(IDictionary<string, object> parameters)
+        public static GroupByInput GetGroupBy(IDictionary<string, object> parameters)
         {
             GroupByInput groupBy = null;
 
@@ -197,7 +197,7 @@ namespace Linq.Extension
            DbSet<T> entity, char delimiter = ',') where T : class
         {
             ParameterExpression pe = Expression.Parameter(typeof(T), "o");
-            Expression combined = GetExpressionOfEFCoreListDataFromDistinctBy(entity, getDistinctBy(parameters), pe, delimiter);
+            Expression combined = GetExpressionOfEFCoreListDataFromDistinctBy(entity, GetDistinctBy(parameters), pe, delimiter);
             Expression e1 = GetDynamicWherePredicate<T>(parameters, pe);
 
             combined = GetCombinedExpression(combined, e1);
@@ -299,7 +299,28 @@ namespace Linq.Extension
 
             return Expression.Lambda<Func<T, bool>>(combined, new ParameterExpression[] {pe });
         }
-        
+
+        public static SearchInput GetSearch(IDictionary<string, object> parameters)
+        {
+            SearchInput obj = null;
+
+            if (parameters != null && parameters.Count > 0)
+            {
+                foreach (var key in parameters.Keys)
+                    if (parameters[key] != null
+                        && (parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Filter.SearchInput"
+                        || (bool)parameters[key]?.GetType()?.FullName.Contains("Filter.SearchInput")
+                        || key.ToLower() == "search"
+                        || parameters[key] is SearchInput))
+                    {
+                        obj = JsonConvert.DeserializeObject<SearchInput>(JsonConvert.SerializeObject(parameters[key]));
+                        break;
+                    }
+            }
+
+            return obj;
+        }
+
         #endregion
 
         #region DistinctBy Select Extension Methods.
@@ -325,7 +346,7 @@ namespace Linq.Extension
 
         public static IQueryable<T> DistinctBy<T>(this IQueryable<T> source, IDictionary<string, object> parameters)
         {
-            var distinctBy = getDistinctBy(parameters);
+            var distinctBy = GetDistinctBy(parameters);
             if (distinctBy != null)
             {
                 var selector = DynamicSelectGenerator<T>(distinctBy.FieldNames);
@@ -348,7 +369,7 @@ namespace Linq.Extension
             return source.Select(x => x).Distinct();
         }
 
-        private static DistinctByInput getDistinctBy(IDictionary<string, object> parameters)
+        public static DistinctByInput GetDistinctBy(IDictionary<string, object> parameters)
         {
             DistinctByInput distinctBy = null;
 
@@ -376,7 +397,7 @@ namespace Linq.Extension
         {
             source = source.DistinctIf(parameters);
 
-            PaginationInput pagingState = getPagination(parameters);
+            PaginationInput pagingState = GetPagination(parameters);
             
             if (pagingState == null)
                 return source;
@@ -393,7 +414,7 @@ namespace Linq.Extension
         {
             source = source.DistinctIf(distinct);
 
-            PaginationInput pagingState = getPagination(parameters);
+            PaginationInput pagingState = GetPagination(parameters);
             if (pagingState == null)
                 return source;
             else
@@ -503,7 +524,7 @@ namespace Linq.Extension
         {
             try
             {
-                PaginationInput pagingState = getPagination(parameters);
+                PaginationInput pagingState = GetPagination(parameters);
                 
                 if (pagingState != null)
                 {
@@ -538,7 +559,7 @@ namespace Linq.Extension
         }
         public static IQueryable<T> Take<T>(this IQueryable<T> source, IDictionary<string, object> parameters)
         {
-            PaginationInput pagingState = getPagination(parameters);
+            PaginationInput pagingState = GetPagination(parameters);
             if (pagingState != null)
             {
                 return source.TakeIfPositiveNumber(pagingState.Take);
@@ -567,7 +588,7 @@ namespace Linq.Extension
         }
         public static IQueryable<T> Skip<T>(this IQueryable<T> source, IDictionary<string, object> parameters)
         {
-            PaginationInput pagingState = getPagination(parameters);
+            PaginationInput pagingState = GetPagination(parameters);
             if (pagingState != null)
             {
                 return source.SkipIfPositiveNumber(pagingState.Skip);
@@ -575,7 +596,7 @@ namespace Linq.Extension
             else
                 return source;
         }
-        private static PaginationInput getPagination(IDictionary<string, object> parameters)
+        public static PaginationInput GetPagination(IDictionary<string, object> parameters)
         {
             PaginationInput pagingState = null;
 
