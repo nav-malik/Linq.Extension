@@ -54,13 +54,13 @@ namespace Linq.Extension
         {
             var groupBy = getGroupBy(parameters);
             var listFieldNames = DelimitedStringToList(groupBy.FieldNames, delimiter);
-            return source.GroupBy(listFieldNames);
+            return source.Where(groupBy.Search).GroupBy(listFieldNames);
         }
 
         public static IQueryable<IGrouping<T, T>> GroupBy<T>(this IQueryable<T> source, GroupByInput groupBy, char delimiter = ',')
         {
             var listFieldNames = DelimitedStringToList(groupBy.FieldNames, delimiter);
-            return source.GroupBy(listFieldNames);
+            return source.Where(groupBy.Search).GroupBy(listFieldNames);
         }
 
         private static GroupByInput getGroupBy(IDictionary<string, object> parameters)
@@ -162,28 +162,7 @@ namespace Linq.Extension
             ParameterExpression pe = Expression.Parameter(typeof(T), "o");                  
 
             return Expression.Lambda<Func<T, bool>>(DynamicWhereExpressionForLists<T>(parameters, pe), new ParameterExpression[] { pe });
-        }
-
-        private static DistinctByInput getDistinctBy(IDictionary<string, object> parameters)
-        {
-            DistinctByInput distinctBy = null;
-
-            if (parameters != null && parameters.Count > 0)
-            {
-                foreach (var key in parameters.Keys)
-                    if (parameters[key] != null
-                        && (parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Unique.DistinctByInput"
-                        || (bool)parameters[key]?.GetType()?.FullName.Contains("Unique.DistinctByInput")
-                        || key.ToLower() == "distinctBy"
-                        || parameters[key] is DistinctByInput))
-                    {
-                        distinctBy = JsonConvert.DeserializeObject<DistinctByInput>(JsonConvert.SerializeObject(parameters[key]));
-                        break;
-                    }
-            }
-
-            return distinctBy;
-        }
+        }              
 
         public static Expression GetExpressionOfEFCoreListDataFromDistinctBy<T>(DbSet<T> source, DistinctByInput distinctBy
             , ParameterExpression pe, char delimiter =',') where T: class
@@ -301,16 +280,18 @@ namespace Linq.Extension
             ParameterExpression pe = Expression.Parameter(typeof(T), "o");
             Expression combined = null;
 
+            if (searchInput == null) return null;
+
             if (searchInput != null)
             {
                 if (searchInput?.FilterGroups?.Count > 0)
                 {
-                    Dictionary<string, PropertyInfo>  sourceProperties = GetSourcePropertiesByFilterGroups<T>(searchInput.FilterGroups);
+                    Dictionary<string, PropertyInfo> sourceProperties = GetSourcePropertiesByFilterGroups<T>(searchInput.FilterGroups);
                     if (sourceProperties?.Count > 0 && pe != null)
                     {
                         combined = GetCombinedExpressionForFilterGroups(FilterGroups: searchInput.FilterGroups,
                             sourceProperties: sourceProperties, pe: pe);
-                    } 
+                    }
                     else
                         combined = Expression.Constant(true);
                 }
@@ -340,6 +321,52 @@ namespace Linq.Extension
                 return source.Select(selector).Distinct();
             else
                 return source.Select(x => x).Distinct();
+        }
+
+        public static IQueryable<T> DistinctBy<T>(this IQueryable<T> source, IDictionary<string, object> parameters)
+        {
+            var distinctBy = getDistinctBy(parameters);
+            if (distinctBy != null)
+            {
+                var selector = DynamicSelectGenerator<T>(distinctBy.FieldNames);
+
+                if (selector != null)
+                    return source.Where(distinctBy.Search).Select(selector).Distinct().Pagination(distinctBy.Pagination);
+            }
+            return source.Select(x => x).Distinct();
+        }
+
+        public static IQueryable<T> DistinctBy<T>(this IQueryable<T> source, DistinctByInput distinctBy)
+        {
+            if (distinctBy != null)
+            {
+                var selector = DynamicSelectGenerator<T>(distinctBy.FieldNames);
+
+                if (selector != null)
+                    return source.Where(distinctBy.Search).Select(selector).Distinct().Pagination(distinctBy.Pagination);
+            }
+            return source.Select(x => x).Distinct();
+        }
+
+        private static DistinctByInput getDistinctBy(IDictionary<string, object> parameters)
+        {
+            DistinctByInput distinctBy = null;
+
+            if (parameters != null && parameters.Count > 0)
+            {
+                foreach (var key in parameters.Keys)
+                    if (parameters[key] != null
+                        && (parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Unique.DistinctByInput"
+                        || (bool)parameters[key]?.GetType()?.FullName.Contains("Unique.DistinctByInput")
+                        || key.ToLower() == "distinctBy"
+                        || parameters[key] is DistinctByInput))
+                    {
+                        distinctBy = JsonConvert.DeserializeObject<DistinctByInput>(JsonConvert.SerializeObject(parameters[key]));
+                        break;
+                    }
+            }
+
+            return distinctBy;
         }
         #endregion
 
@@ -609,6 +636,7 @@ namespace Linq.Extension
         public static Expression<Func<T, T>> DynamicSelectGenerator<T>(IEnumerable<string> fieldsNames,
             bool fetchParentEntityAlongWithParentlId = false)
         {
+            if (fieldsNames == null || fieldsNames?.Count() < 1) return null;
             var sourceProperties = GetSelectionSetAsDictionaryOfProperties<T>(fieldsNames, fetchParentEntityAlongWithParentlId);
 
             ParameterExpression sourceItem = Expression.Parameter(typeof(T), "t");
