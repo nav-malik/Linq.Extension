@@ -36,20 +36,21 @@ namespace Linq.Extension
                 first = second;
                 return first;
             }
-            if (first == null)
-            {
-                first = Expression.Constant(true);
-            }
-            if (second == null)
-                second = Expression.Constant(true);
+           
             if (first != null && second != null)
             {
                 if (!isAndLogic)
                 {
-                    first = BinaryExpression.OrElse(first, second);                    
+                    first ??= Expression.Constant(false);
+                    second ??= Expression.Constant(false);
+                    first = BinaryExpression.OrElse(first, second);
                 }
                 else
+                {
+                    first ??= Expression.Constant(true);
+                    second ??= Expression.Constant(true);
                     first = BinaryExpression.AndAlso(first, second);
+                }
             }
 
             return first;
@@ -103,10 +104,32 @@ namespace Linq.Extension
             return Expression.Lambda<Func<T, bool>>(DynamicWhereExpressionForLists<T>(parameters, pe), new ParameterExpression[] { pe });
         }
 
+        private static DistinctByInput getDistinctBy(IDictionary<string, object> parameters)
+        {
+            DistinctByInput distinctBy = null;
+
+            if (parameters != null && parameters.Count > 0)
+            {
+                foreach (var key in parameters.Keys)
+                    if (parameters[key] != null
+                        && (parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Unique.DistinctByInput"
+                        || (bool)parameters[key]?.GetType()?.FullName.Contains("Unique.DistinctByInput")
+                        || key.ToLower() == "distinctBy"
+                        || parameters[key] is DistinctByInput))
+                    {
+                        distinctBy = JsonConvert.DeserializeObject<DistinctByInput>(JsonConvert.SerializeObject(parameters[key]));
+                        break;
+                    }
+            }
+
+            return distinctBy;
+        }
+
         public static Expression GetExpressionOfEFCoreListDataFromDistinctBy<T>(DbSet<T> source, DistinctByInput distinctBy
             , ParameterExpression pe, char delimiter =',') where T: class
         {
             Expression combined = null;
+            if (source == null || distinctBy == null) return null;
 
             var list = source.GetEFCoreListDataFromDistinctBy(distinctBy);
 
@@ -120,6 +143,7 @@ namespace Linq.Extension
         public static List<T> GetEFCoreListDataFromDistinctBy<T>(this DbSet<T> source,
             DistinctByInput distinctBy) where T: class
         {
+            if (source == null || distinctBy == null) return null;
             var distinctByData = source
                 .AsNoTracking()
                 .Where(distinctBy?.Search)
@@ -128,6 +152,21 @@ namespace Linq.Extension
                 .ToList();
 
             return distinctByData;
+        }
+
+        public static IQueryable<T> WhereWithDistinctBy<T>(this IQueryable<T> source, IDictionary<string, object> parameters,
+           DbSet<T> entity, char delimiter = ',') where T : class
+        {
+            ParameterExpression pe = Expression.Parameter(typeof(T), "o");
+            Expression combined = GetExpressionOfEFCoreListDataFromDistinctBy(entity, getDistinctBy(parameters), pe, delimiter);
+            Expression e1 = GetDynamicWherePredicate<T>(parameters, pe);
+
+            combined = GetCombinedExpression(combined, e1);
+
+            if (combined != null)
+                return source.Where(Expression.Lambda<Func<T, bool>>(combined, new ParameterExpression[] { pe }));
+            else
+                return source;
         }
 
         public static IQueryable<T> WhereWithDistinctBy<T>(this IQueryable<T> source, IDictionary<string, object> parameters,
@@ -246,26 +285,12 @@ namespace Linq.Extension
 
         #region Pagination, Sort, Take and Distinct Methods
 
-        public static IQueryable<T> Pagination<T>(this IQueryable<T> source, IDictionary<string, object> parameters,
-            bool distinct = false)
+        public static IQueryable<T> Pagination<T>(this IQueryable<T> source, IDictionary<string, object> parameters)
         {
-            PaginationInput pagingState = null;
+            source = source.DistinctIf(parameters);
 
-            source = source.DistinctIf(distinct);
-
-            if (parameters != null && parameters.Count > 0)
-            {
-                foreach (var key in parameters.Keys)
-                    if (parameters[key] != null
-                        && (parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Pagination.PaginationInput"
-                        || key.ToLower() == "pagination"
-                        || parameters[key] is PaginationInput))
-                    {
-                        pagingState = JsonConvert.DeserializeObject<PaginationInput>(JsonConvert.SerializeObject(parameters["pagination"]));
-                        break;
-                    }
-                //pagingState = parameters["pagination"].GetPropertyValue<PaginationInput>();
-            }
+            PaginationInput pagingState = getPagination(parameters);
+            
             if (pagingState == null)
                 return source;
             else
@@ -276,7 +301,22 @@ namespace Linq.Extension
                     .TakeIfPositiveNumber(pagingState.Take);
             }
         }
+        public static IQueryable<T> Pagination<T>(this IQueryable<T> source, IDictionary<string, object> parameters,
+            bool distinct = false)
+        {
+            source = source.DistinctIf(distinct);
 
+            PaginationInput pagingState = getPagination(parameters);
+            if (pagingState == null)
+                return source;
+            else
+            {
+                return source
+                    .SortBy(pagingState.Sorts)
+                    .SkipIfPositiveNumber(pagingState.Skip)
+                    .TakeIfPositiveNumber(pagingState.Take);
+            }
+        }
         public static IQueryable<T> Pagination<T>(this IQueryable<T> source, PaginationInput pagination,
             bool distinct = false)
         {
@@ -292,9 +332,16 @@ namespace Linq.Extension
                     .TakeIfPositiveNumber(pagination.Take);
             }
         }
-
         public static IQueryable<T> DistinctIf<T> (this IQueryable<T> source, bool distinct = false)
         {
+            if (distinct)
+                source = source.Distinct();
+            return source;
+        }
+        public static IQueryable<T> DistinctIf<T>(this IQueryable<T> source, IDictionary<string, object> parameters,
+            string distinctKeyName = "distinct")
+        {
+            bool distinct = (bool)parameters[distinctKeyName];
             if (distinct)
                 source = source.Distinct();
             return source;
@@ -365,6 +412,24 @@ namespace Linq.Extension
                 return source;
             }
         }
+        public static IQueryable<T> SortBy<T>(this IQueryable<T> source, IDictionary<string, object> parameters)
+        {
+            try
+            {
+                PaginationInput pagingState = getPagination(parameters);
+                
+                if (pagingState != null)
+                {
+                    return source.SortBy(pagingState.Sorts);
+                }
+                else
+                    return source;
+            }
+            catch (Exception Ex)
+            {
+                return source;
+            }
+        }
         public static IQueryable<T> TakeIfPositiveNumber<T>(this IQueryable<T> source, int? count)
         {
             if (count.HasValue && count.Value > 0)
@@ -380,6 +445,16 @@ namespace Linq.Extension
                     source.Expression,
                     Expression.Constant(count))
                     );
+            }
+            else
+                return source;
+        }
+        public static IQueryable<T> Take<T>(this IQueryable<T> source, IDictionary<string, object> parameters)
+        {
+            PaginationInput pagingState = getPagination(parameters);
+            if (pagingState != null)
+            {
+                return source.TakeIfPositiveNumber(pagingState.Take);
             }
             else
                 return source;
@@ -402,6 +477,36 @@ namespace Linq.Extension
             }
             else
                 return source;
+        }
+        public static IQueryable<T> Skip<T>(this IQueryable<T> source, IDictionary<string, object> parameters)
+        {
+            PaginationInput pagingState = getPagination(parameters);
+            if (pagingState != null)
+            {
+                return source.SkipIfPositiveNumber(pagingState.Skip);
+            }
+            else
+                return source;
+        }
+        private static PaginationInput getPagination(IDictionary<string, object> parameters)
+        {
+            PaginationInput pagingState = null;
+
+            if (parameters != null && parameters.Count > 0)
+            {
+                foreach (var key in parameters.Keys)
+                    if (parameters[key] != null
+                        && (parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Pagination.PaginationInput"
+                        || (bool)parameters[key]?.GetType()?.FullName.Contains("Pagination.PaginationInput")
+                        || key.ToLower() == "pagination"
+                        || parameters[key] is PaginationInput))
+                    {
+                        pagingState = JsonConvert.DeserializeObject<PaginationInput>(JsonConvert.SerializeObject(parameters[key]));
+                        break;
+                    }
+            }
+
+            return pagingState;
         }
 
         #endregion
@@ -1300,12 +1405,7 @@ namespace Linq.Extension
                 first = second;
                 return first;
             }
-            if (first == null)
-            {
-                first = Expression.Constant(true);
-            }
-            if (second == null)
-                second = Expression.Constant(true);
+            
             if (first != null && second != null)
             {
                 if (filterInput != null)
@@ -1315,10 +1415,14 @@ namespace Linq.Extension
                         switch (filterInput.Logic)
                         {
                             case FilterLogicEnum.or:
+                                first ??= Expression.Constant(false);
+                                second ??= Expression.Constant(false);
                                 first = BinaryExpression.OrElse(first, second);
                                 //first = Expression.Or(first, second);
                                 break;
                             default:
+                                first ??= Expression.Constant(true);
+                                second ??= Expression.Constant(true);
                                 first = BinaryExpression.AndAlso(first, second);
                                 //first = Expression.And(first, second);
                                 break;
@@ -1328,7 +1432,11 @@ namespace Linq.Extension
                         first = second;// Expression.And(first, second);
                 }
                 else
+                {
+                    first ??= Expression.Constant(true);
+                    second ??= Expression.Constant(true);
                     first = BinaryExpression.AndAlso(first, second);
+                }
             }
 
             return first;
