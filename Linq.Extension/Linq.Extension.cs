@@ -83,6 +83,17 @@ namespace Linq.Extension
 
             return groupBy;
         }
+        public static GroupByInput GetGroupBy(IDictionary<string, object> parameters, string keyName)
+        {
+            GroupByInput obj = null;
+
+            if (parameters != null && parameters.Count > 0 && parameters.Keys.Contains(keyName) && parameters[keyName] != null)
+            {
+                obj = JsonConvert.DeserializeObject<GroupByInput>(JsonConvert.SerializeObject(parameters[keyName]));
+            }
+
+            return obj;
+        }
 
         #endregion
 
@@ -321,6 +332,18 @@ namespace Linq.Extension
             return obj;
         }
 
+        public static SearchInput GetSearch(IDictionary<string, object> parameters, string keyName)
+        {
+            SearchInput obj = null;
+
+            if (parameters != null && parameters.Count > 0 && parameters.Keys.Contains(keyName) && parameters[keyName] != null)
+            {
+                obj = JsonConvert.DeserializeObject<SearchInput>(JsonConvert.SerializeObject(parameters[keyName]));
+            }
+
+            return obj;
+        }
+
         #endregion
 
         #region DistinctBy Select Extension Methods.
@@ -342,6 +365,24 @@ namespace Linq.Extension
                 return source.Select(selector).Distinct();
             else
                 return source.Select(x => x).Distinct();
+        }
+
+        public static IQueryable<T> DistinctBySelect<T>(this IQueryable<T> source, IDictionary<string, object> parameters)
+        {
+            var distinctBy = GetDistinctBy(parameters);
+            return source.DistinctBySelect(distinctBy);
+        }
+
+        public static IQueryable<T> DistinctBySelect<T>(this IQueryable<T> source, DistinctByInput distinctBy)
+        {
+            if (distinctBy != null)
+            {
+                var selector = DynamicSelectGenerator<T>(distinctBy.FieldNames);
+
+                if (selector != null)
+                    return source.Select(selector).Distinct();
+            }
+            return source.Select(x => x).Distinct();
         }
 
         public static IQueryable<T> DistinctBy<T>(this IQueryable<T> source, IDictionary<string, object> parameters)
@@ -369,6 +410,51 @@ namespace Linq.Extension
             return source.Select(x => x).Distinct();
         }
 
+        public static IQueryable<T> DistinctBy<T>(this IQueryable<T> source, IDictionary<string, object> parameters,
+            bool withPagination, bool withWhere = true)
+        {
+            var distinctBy = GetDistinctBy(parameters);
+            if (distinctBy != null)
+            {
+                var selector = DynamicSelectGenerator<T>(distinctBy.FieldNames);
+
+                if (selector != null)
+                {
+                    if (withWhere)
+                        source = source.Where(distinctBy.Search);
+                    
+                    source = source.Select(selector).Distinct();
+                    
+                    if (withPagination)
+                        source = source.Pagination(distinctBy.Pagination);
+                    return source;
+                }
+            }
+            return source.Select(x => x).Distinct();
+        }
+
+        public static IQueryable<T> DistinctBy<T>(this IQueryable<T> source, DistinctByInput distinctBy,
+            bool withPagination, bool withWhere = true)
+        {
+            if (distinctBy != null)
+            {
+                var selector = DynamicSelectGenerator<T>(distinctBy.FieldNames);
+
+                if (selector != null)
+                {
+                    if (withWhere)
+                        source = source.Where(distinctBy.Search);
+
+                    source = source.Select(selector).Distinct();
+
+                    if (withPagination)
+                        source = source.Pagination(distinctBy.Pagination);
+                    return source;
+                }
+            }
+            return source.Select(x => x).Distinct();
+        }
+
         public static DistinctByInput GetDistinctBy(IDictionary<string, object> parameters)
         {
             DistinctByInput distinctBy = null;
@@ -385,6 +471,17 @@ namespace Linq.Extension
                         distinctBy = JsonConvert.DeserializeObject<DistinctByInput>(JsonConvert.SerializeObject(parameters[key]));
                         break;
                     }
+            }
+
+            return distinctBy;
+        }
+        public static DistinctByInput GetDistinctBy(IDictionary<string, object> parameters, string keyName)
+        {
+            DistinctByInput distinctBy = null;
+
+            if (parameters != null && parameters.Count > 0 && parameters.Keys.Contains(keyName) && parameters[keyName] != null)
+            {
+                distinctBy = JsonConvert.DeserializeObject<DistinctByInput>(JsonConvert.SerializeObject(parameters[keyName]));
             }
 
             return distinctBy;
@@ -617,10 +714,22 @@ namespace Linq.Extension
             return pagingState;
         }
 
+        public static PaginationInput GetPagination(IDictionary<string, object> parameters, string keyName)
+        {
+            PaginationInput obj = null;
+
+            if (parameters != null && parameters.Count > 0 && parameters.Keys.Contains(keyName) && parameters[keyName] != null)
+            {
+                obj = JsonConvert.DeserializeObject<PaginationInput>(JsonConvert.SerializeObject(parameters[keyName]));
+            }
+
+            return obj;
+        }
+
         #endregion
 
         #region Selection Extension Methods for Actual Type instead of Dynamic Type.
-                
+
         public static IQueryable<dynamic> SelectAsAnomouysType<T>(this IQueryable<T> source, IEnumerable<string> fieldsNames,
             bool fetchParentEntityAlongWithParentlId = false)
         {

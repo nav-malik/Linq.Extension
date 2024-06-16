@@ -9,8 +9,8 @@
     <Copyright>Nav Malik</Copyright>
     <Description>Linq Extension to provide Dynamic Where Condition with Groups, Child Groups &amp; Filters and Dynamic Select, Dynamic Take If Positive Number, Pagination and Nesting Predicates with parenthesis. Use SearchInput class for Dynamic Where and PaginationInput for pagination (take, skip and sort).</Description>
     <PackageTags>Linq Extension DynamicSelect DynamicWhere Linq.Entities LinqEntity Linq.Entity Nesting Predicates NestingPredicates</PackageTags>
-    <Version>3.6.3</Version>
-    <PackageReleaseNotes>3.6.3 Added GetSearch, GetPagination, GetDistinctBy, GetGroupBy methods.</PackageReleaseNotes>
+    <Version>3.6.4</Version>
+    <PackageReleaseNotes>3.6.4 Added  overloaded methods for DistinctBySelect, DistinctBy, GetSearch, GetPagination, GetDistinctBy, and GetGroupBy methods.</PackageReleaseNotes>
     <Title>Linq.Extension</Title>
     <RepositoryUrl>https://github.com/nav-malik/Linq.Extension</RepositoryUrl>
     <PackageProjectUrl>https://github.com/nav-malik/Linq.Extension</PackageProjectUrl>
