@@ -95,3 +95,19 @@ namespace Linq.Extension.Unique
         public PaginationInput Pagination {  get; set; }
     }
 }
+
+namespace Linq.Extension.Grouping
+{
+    public class GroupByInput
+    {
+        /// <summary>
+        /// Comma (,) separated field names.
+        /// </summary>
+        public string FieldNames { get; set; }
+
+        /// <summary>
+        /// Provide search object to filter data for DistinctBy.
+        /// </summary>
+        public SearchInput Search { get; set; }
+    }
+}

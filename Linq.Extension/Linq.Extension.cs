@@ -7,15 +7,13 @@ using System.Reflection.Emit;
 using System.Threading;
 using Linq.Extension.Filter;
 using Linq.Extension.Pagination;
-//using MoreLinq.Extensions;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Threading.Tasks;
-using Newtonsoft.Json.Linq;
-using System.Net.Http.Headers;
 using Linq.Extension.Unique;
 using Microsoft.EntityFrameworkCore;
+using Linq.Extension.Grouping;
 
 namespace Linq.Extension
 {
@@ -49,6 +47,41 @@ namespace Linq.Extension
         {
             var listFieldNames = DelimitedStringToList(fieldNames, delimiter);
             return source.GroupBy(listFieldNames);
+        }
+
+        public static IQueryable<IGrouping<T, T>> GroupBy<T>(this IQueryable<T> source, IDictionary<string, object> parameters
+            , char delimiter = ',')
+        {
+            var groupBy = getGroupBy(parameters);
+            var listFieldNames = DelimitedStringToList(groupBy.FieldNames, delimiter);
+            return source.GroupBy(listFieldNames);
+        }
+
+        public static IQueryable<IGrouping<T, T>> GroupBy<T>(this IQueryable<T> source, GroupByInput groupBy, char delimiter = ',')
+        {
+            var listFieldNames = DelimitedStringToList(groupBy.FieldNames, delimiter);
+            return source.GroupBy(listFieldNames);
+        }
+
+        private static GroupByInput getGroupBy(IDictionary<string, object> parameters)
+        {
+            GroupByInput groupBy = null;
+
+            if (parameters != null && parameters.Count > 0)
+            {
+                foreach (var key in parameters.Keys)
+                    if (parameters[key] != null
+                        && (parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Grouping.GroupByInput"
+                        || (bool)parameters[key]?.GetType()?.FullName.Contains("Grouping.GroupByInput")
+                        || key.ToLower() == "groupBy"
+                        || parameters[key] is GroupByInput))
+                    {
+                        groupBy = JsonConvert.DeserializeObject<GroupByInput>(JsonConvert.SerializeObject(parameters[key]));
+                        break;
+                    }
+            }
+
+            return groupBy;
         }
 
         #endregion
@@ -368,7 +401,7 @@ namespace Linq.Extension
         public static IQueryable<T> DistinctIf<T>(this IQueryable<T> source, IDictionary<string, object> parameters,
             string distinctKeyName = "distinct")
         {
-            bool distinct = (bool)parameters[distinctKeyName];
+            bool distinct = parameters.Keys.Contains(distinctKeyName) ? (bool)parameters[distinctKeyName] : false;
             if (distinct)
                 source = source.Distinct();
             return source;
