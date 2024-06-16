@@ -9,8 +9,10 @@
     <Copyright>Nav Malik</Copyright>
     <Description>Linq Extension to provide Dynamic Where Condition with Groups, Child Groups &amp; Filters and Dynamic Select, Dynamic Take If Positive Number, Pagination and Nesting Predicates with parenthesis. Use SearchInput class for Dynamic Where and PaginationInput for pagination (take, skip and sort).</Description>
     <PackageTags>Linq Extension DynamicSelect DynamicWhere Linq.Entities LinqEntity Linq.Entity Nesting Predicates NestingPredicates</PackageTags>
-    <Version>3.5.1</Version>
-    <PackageReleaseNotes>3.5.1 Added overloaded Extension methods for WhereWithDistinctBy,  SortBy, Take, Skip and DisinctIf to take dictionary of string and object pair to get DistinctBy object or Pagination object instead of passing actual type.
+    <Version>3.6.0</Version>
+    <PackageReleaseNotes>3.6.0 Added dynamic GroupBy which takes field names as list of string or delimited strings.
+***************-----------****************
+3.5.1 Added overloaded Extension methods for WhereWithDistinctBy,  SortBy, Take, Skip and DisinctIf to take dictionary of string and object pair to get DistinctBy object or Pagination object instead of passing actual type.
 ***************-----------****************
 3.5.0 Added Where Extension Methods. Added EF Core DistinctBy Extension Method which List of original type, also added WhereWithDistinctBy which will fetch list of data from distinct by and convert into where expression and then combine it with rest of where expression to make one combine where predicate.
 ***************-----------****************

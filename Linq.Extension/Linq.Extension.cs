@@ -26,6 +26,33 @@ namespace Linq.Extension
             
         }
 
+        #region GroupBy
+
+        public static IQueryable<IGrouping<T, T>> GroupBy<T>(this IQueryable<T> source, List<string> fieldNames)
+        {
+            var sourceProperties = GetSelectionSetAsDictionaryOfProperties<T>(fieldNames);
+
+            ParameterExpression pe = Expression.Parameter(typeof(T), "t");
+
+            IEnumerable<MemberBinding> bindings = typeof(T).GetProperties()
+                .Where(x => sourceProperties.ContainsKey(x.Name))
+                .Select(p => Expression.Bind(p, Expression.Property(pe, sourceProperties[p.Name]))).OfType<MemberBinding>();
+
+            var newExpression = Expression.MemberInit(
+                Expression.New(typeof(T))
+                , bindings);
+
+            return source.GroupBy(Expression.Lambda<Func<T, T>>(newExpression, pe));
+        }
+
+        public static IQueryable<IGrouping<T, T>> GroupBy<T>(this IQueryable<T> source, string fieldNames, char delimiter = ',')
+        {
+            var listFieldNames = DelimitedStringToList(fieldNames, delimiter);
+            return source.GroupBy(listFieldNames);
+        }
+
+        #endregion
+
         #region Where Extension Methods and Dynamic Where Predicate for Lists
 
         public static Expression CombinedExpression(Expression first, Expression second, bool isAndLogic = true)
