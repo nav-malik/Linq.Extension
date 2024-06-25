@@ -106,8 +106,56 @@ namespace Linq.Extension.Grouping
         public string FieldNames { get; set; }
 
         /// <summary>
-        /// Provide search object to filter data for DistinctBy.
+        /// Provide search object to filter data for GroupBy.
         /// </summary>
         public SearchInput Search { get; set; }
+    }
+
+    public class GroupByOperationOnInput
+    {
+        /// <summary>
+        /// Comma (,) separated field names.
+        /// </summary>
+        public string GroupByFieldNames { get; set; }
+
+        /// <summary>
+        /// Single field name.
+        /// </summary>
+        public string OperationOnFieldName { get; set; }
+
+        /// <summary>
+        /// Operations can be sum, count, min and max, default is count.
+        /// </summary>
+        public GroupByOperationEnum Operation { get; set; }
+
+        /// <summary>
+        /// Provide search object to filter data for GroupBy fields.
+        /// </summary>
+        public SearchInput Search { get; set; }
+
+        /// <summary>
+        /// Provide pagination object to apply sort, take and skip on data for GroupBy fields.
+        /// </summary>
+        public PaginationInput Pagination { get; set; }
+    }
+
+    public enum GroupByOperationEnum
+    {
+        count,
+        sum,
+        min,
+        max
+    }
+
+    public class GroupValuePair
+    {
+        public List<GroupKeyNameValue> Keys { get; set; }
+        public int Value { get; set; }
+    }
+
+    public class GroupKeyNameValue
+    {
+        public string KeyName { get; set; }
+        public string KeyValue {get; set;}
     }
 }

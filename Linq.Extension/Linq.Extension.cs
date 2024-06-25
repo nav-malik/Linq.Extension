@@ -14,6 +14,7 @@ using System.Threading.Tasks;
 using Linq.Extension.Unique;
 using Microsoft.EntityFrameworkCore;
 using Linq.Extension.Grouping;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
 
 namespace Linq.Extension
 {
@@ -23,6 +24,186 @@ namespace Linq.Extension
         {
             
         }
+
+        #region GroupByOperationOn
+
+        private static SearchInput CreateGroupSearch(List<GroupKeyNameValue> groupKeyNameValues)
+        {
+            List<FilterInput> filters = new();
+            foreach(var keyNameValue in groupKeyNameValues)
+            {
+                filters.Add(new FilterInput
+                {
+                    Logic = FilterLogicEnum.and,
+                    Operation = FilterOperationEnum.eq,
+                    FieldName = keyNameValue.KeyName,
+                    Value = keyNameValue.KeyValue
+                });
+            }
+
+            SearchInput search = new()
+            {
+                FilterGroups = new List<FilterGroupInput>
+                {
+                    new FilterGroupInput
+                    {
+                        Logic = FilterLogicEnum.and,
+                        Filters = filters
+                    }
+                }
+            };
+
+            return search;
+        }
+
+        public static List<GroupValuePair> GetListOfGroupValuePair<T>(this IQueryable<T> source, DbSet<T> entity,
+            Dictionary<string, object> parameters) where T: class
+        {
+            var groupByOperationOn = GetGroupByOperationOn(parameters);
+
+            DistinctByInput distinctBy = new()
+            {
+                FieldNames = groupByOperationOn.GroupByFieldNames,
+                Pagination = groupByOperationOn.Pagination,
+                Search = groupByOperationOn.Search
+            };
+
+            var keys = entity
+                .GetEFCoreListDataFromDistinctBy(distinctBy);
+
+            var data = source
+                .AsNoTracking()
+                .Where(keys, groupByOperationOn.GroupByFieldNames)
+                .Where(parameters)
+                .DistinctBySelect(groupByOperationOn.GroupByFieldNames.Trim(',') + "," 
+                    + groupByOperationOn.OperationOnFieldName.Trim(','))
+                .ToList();
+
+            var listGroupByFields = DelimitedStringToList(groupByOperationOn.GroupByFieldNames);
+
+            List<GroupValuePair> listOfKeyValue = new();
+
+            foreach(var key in keys)
+            {
+                List<GroupKeyNameValue> groupKeyNameValues = new();
+                foreach (var field in listGroupByFields)
+                {
+                    groupKeyNameValues.Add(new GroupKeyNameValue 
+                    {
+                        KeyName = field,
+                        KeyValue = Convert.ToString(GetPropertValue<T, object>(key, field))
+                    });
+                }
+
+                listOfKeyValue.Add(new GroupValuePair
+                {
+                    Keys = groupKeyNameValues,
+                    Value = data
+                            .GetGroupByOperationResult(CreateGroupSearch(groupKeyNameValues),
+                                groupByOperationFieldName: groupByOperationOn.OperationOnFieldName,
+                                groupByOperation: groupByOperationOn.Operation)
+                });
+            }
+
+            return listOfKeyValue;
+        }
+
+        public static IEnumerable<T> Where<T>(this IEnumerable<T> source, SearchInput search)
+        {
+            var selector = DynamicWherePredicate<T>(search);
+
+            if (selector != null)
+                return source.Where(selector.Compile());
+            else
+                return source;
+        }
+
+        public static int GetGroupByOperationResult<T>(this IEnumerable<T> source, SearchInput search,
+            string groupByOperationFieldName, GroupByOperationEnum groupByOperation = GroupByOperationEnum.count)
+        {
+            int result = 0;
+            switch (groupByOperation)
+            {
+                case GroupByOperationEnum.sum:
+                    result = source.Where(search)
+                        .Sum(GroupByOperationSelectGenerator<T>(groupByOperationFieldName).Compile());
+                    break;
+                case GroupByOperationEnum.min:
+                    result = source.Where(search)
+                        .Min(GroupByOperationSelectGenerator<T>(groupByOperationFieldName).Compile());
+                    break;
+                case GroupByOperationEnum.max:
+                    result = source.Where(search)
+                        .Max(GroupByOperationSelectGenerator<T>(groupByOperationFieldName).Compile());
+                    break;
+                default:
+                    result = source.Where(search).Count();
+                    break;
+            }
+            return result;
+        }
+
+        public static Expression<Func<T, int>> GroupByOperationSelectGenerator<T>(string fieldName)
+        {
+            var sourceProperties = GetSelectionSetAsDictionaryOfProperties<T>(DelimitedStringToList(fieldName));
+
+            var colName = ToTitleCase(fieldName);
+            var property = sourceProperties[colName];
+
+            ParameterExpression sourceItem = Expression.Parameter(typeof(T), "t");
+
+            if (property == null)
+            {
+                throw new ArgumentNullException($"Property '{colName}' not found on type {typeof(T)}.");
+            }
+
+            var propertExpression = Expression.Property(sourceItem, property);
+            return Expression.Lambda<Func<T, int>>(propertExpression, sourceItem);
+        }
+
+        public static GroupByOperationEnum GetGroupByOperation(IDictionary<string, object> parameters)
+        {
+            GroupByOperationEnum groupBy = GroupByOperationEnum.count;
+
+            if (parameters != null && parameters.Count > 0)
+            {
+                foreach (var key in parameters.Keys)
+                    if (parameters[key] != null
+                        && (parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Grouping.GroupByOperationEnum"
+                        || (bool)parameters[key]?.GetType()?.FullName.Contains("Grouping.GroupByOperationEnum")
+                        || key == "operation"
+                        || parameters[key] is GroupByOperationEnum))
+                    {
+                        groupBy = JsonConvert.DeserializeObject<GroupByOperationEnum>(JsonConvert.SerializeObject(parameters[key]));
+                        break;
+                    }
+            }
+
+            return groupBy;
+        }
+
+        public static GroupByOperationOnInput GetGroupByOperationOn(IDictionary<string, object> parameters)
+        {
+            GroupByOperationOnInput groupBy = null;
+
+            if (parameters != null && parameters.Count > 0)
+            {
+                foreach (var key in parameters.Keys)
+                    if (parameters[key] != null
+                        && (parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Grouping.GroupByOperationOnInput"
+                        || (bool)parameters[key]?.GetType()?.FullName.Contains("Grouping.GroupByOperationOnInput")
+                        || key == "groupByOperationOn"
+                        || parameters[key] is GroupByOperationOnInput))
+                    {
+                        groupBy = JsonConvert.DeserializeObject<GroupByOperationOnInput>(JsonConvert.SerializeObject(parameters[key]));
+                        break;
+                    }
+            }
+
+            return groupBy;
+        }
+
+        #endregion
 
         #region GroupBy
 
@@ -73,7 +254,7 @@ namespace Linq.Extension
                     if (parameters[key] != null
                         && (parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Grouping.GroupByInput"
                         || (bool)parameters[key]?.GetType()?.FullName.Contains("Grouping.GroupByInput")
-                        || key.ToLower() == "groupBy"
+                        || key == "groupBy"
                         || parameters[key] is GroupByInput))
                     {
                         groupBy = JsonConvert.DeserializeObject<GroupByInput>(JsonConvert.SerializeObject(parameters[key]));
@@ -590,7 +771,7 @@ namespace Linq.Extension
                     if (parameters[key] != null
                         && (parameters[key]?.GetType()?.FullName == "GraphQL.Extensions.Base.Unique.DistinctByInput"
                         || (bool)parameters[key]?.GetType()?.FullName.Contains("Unique.DistinctByInput")
-                        || key.ToLower() == "distinctBy"
+                        || key == "distinctBy"
                         || parameters[key] is DistinctByInput))
                     {
                         distinctBy = JsonConvert.DeserializeObject<DistinctByInput>(JsonConvert.SerializeObject(parameters[key]));
@@ -1085,10 +1266,11 @@ namespace Linq.Extension
 
         public static TValue GetPropertValue<TSource, TValue>(TSource obj, string propertyName)
         {
-            var propertyInfo = typeof(TSource).GetProperty(propertyName);
+            string colName = ToTitleCase(propertyName);
+            var propertyInfo = typeof(TSource).GetProperty(colName);
             if (propertyInfo == null)
             {
-                throw new ArgumentNullException($"Property '{propertyName}' not found on type {typeof(TSource)}.");
+                throw new ArgumentNullException($"Property '{colName}' not found on type {typeof(TSource)}.");
             }
 
             return (TValue) propertyInfo.GetValue(obj);
