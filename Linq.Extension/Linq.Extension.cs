@@ -57,7 +57,7 @@ namespace Linq.Extension
         }
 
         public static List<GroupValuePair> GetListOfGroupValuePair<T>(this IQueryable<T> source, DbSet<T> entity,
-            Dictionary<string, object> parameters) where T: class
+            IDictionary<string, object> parameters) where T: class
         {
             var groupByOperationOn = GetGroupByOperationOn(parameters);
 

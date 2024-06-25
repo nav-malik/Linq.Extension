@@ -9,8 +9,8 @@
     <Copyright>Nav Malik</Copyright>
     <Description>Linq Extension to provide Dynamic Where Condition with Groups, Child Groups &amp; Filters and Dynamic Select, Dynamic Take If Positive Number, Pagination and Nesting Predicates with parenthesis. Use SearchInput class for Dynamic Where and PaginationInput for pagination (take, skip and sort).</Description>
     <PackageTags>Linq Extension DynamicSelect DynamicWhere Linq.Entities LinqEntity Linq.Entity Nesting Predicates NestingPredicates</PackageTags>
-    <Version>3.7.0</Version>
-    <PackageReleaseNotes>3.7.0 Added GroupByOperationOn classes and methods. This will provide option to group by on multiple fields (, separated fields) and then perform an operation like count, sum, max or min on another field. Also provide option to apply where and pagination on group by.</PackageReleaseNotes>
+    <Version>3.7.0.1</Version>
+    <PackageReleaseNotes>3.7.0.1 Changed parameters type to IDictionary in GetListOfGroupValuePair</PackageReleaseNotes>
     <Title>Linq.Extension</Title>
     <RepositoryUrl>https://github.com/nav-malik/Linq.Extension</RepositoryUrl>
     <PackageProjectUrl>https://github.com/nav-malik/Linq.Extension</PackageProjectUrl>
