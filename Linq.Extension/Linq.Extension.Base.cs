@@ -80,9 +80,18 @@ namespace Linq.Extension.Unique
     public class DistinctByInput
     {
         /// <summary>
-        /// Comma (,) separated field names.
+        /// Delimited separated field names.
         /// </summary>
         public string FieldNames { get; set; }
+
+        /// <summary>
+        /// Provide Delimiter for Field Names, default is ",".
+        /// </summary>
+        public string DelimiterFieldNames { get; set; } = ",";
+        /// <summary>
+        /// Provide Delimiter for Field Values, default is ",".
+        /// </summary>
+        public string DelimiterFieldValues { get; set; } = ",";
 
         /// <summary>
         /// Provide search object to filter data for DistinctBy.
@@ -101,9 +110,14 @@ namespace Linq.Extension.Grouping
     public class GroupByInput
     {
         /// <summary>
-        /// Comma (,) separated field names.
+        /// Delimited separated field names.
         /// </summary>
         public string FieldNames { get; set; }
+
+        /// <summary>
+        /// Provide Delimiter for Field Names, default is ",".
+        /// </summary>
+        public string DelimiterFieldNames { get; set; } = ",";        
 
         /// <summary>
         /// Provide search object to filter data for GroupBy.
@@ -114,7 +128,7 @@ namespace Linq.Extension.Grouping
     public class GroupByOperationOnInput
     {
         /// <summary>
-        /// Comma (,) separated field names.
+        /// Delimited separated field names.
         /// </summary>
         public string GroupByFieldNames { get; set; }
 
@@ -122,6 +136,15 @@ namespace Linq.Extension.Grouping
         /// Single field name.
         /// </summary>
         public string OperationOnFieldName { get; set; }
+
+        /// <summary>
+        /// Provide Delimiter for Field Names, default is ",".
+        /// </summary>
+        public string DelimiterFieldNames { get; set; } = ",";
+        /// <summary>
+        /// Provide Delimiter for Field Values, default is ",".
+        /// </summary>
+        public string DelimiterFieldValues { get; set; } = ",";
 
         /// <summary>
         /// Operations can be sum, count, min and max, default is count.
