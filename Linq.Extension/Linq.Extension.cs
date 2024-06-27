@@ -1596,7 +1596,8 @@ namespace Linq.Extension
                                         if (!string.IsNullOrEmpty(strValue))
                                         {
                                             var inList = GetListForInOperationFromValue(strValue,
-                                                sourceProperties[filterInput.FieldName], pe, out method, out Expression propExpression);
+                                                sourceProperties[filterInput.FieldName], pe, out method, out Expression propExpression,
+                                                delimiterFieldValues: filterInput.DelimiterListOfValues);
                                             if (inList != null && method != null)
                                                 e1 = Expression.Call(Expression.Constant(inList), method, propExpression);
                                         }
@@ -1606,7 +1607,8 @@ namespace Linq.Extension
                                         if (!string.IsNullOrEmpty(strValue2))
                                         {
                                             var inList = GetListForInOperationFromValue(strValue2,
-                                                sourceProperties[filterInput.FieldName], pe, out method, out Expression propExpression);
+                                                sourceProperties[filterInput.FieldName], pe, out method, out Expression propExpression,
+                                                delimiterFieldValues: filterInput.DelimiterListOfValues);
                                             if (inList != null && method != null)
                                                 e1 = Expression.Not(
                                                     Expression.Call(Expression.Constant(inList), method, propExpression));
@@ -1717,7 +1719,8 @@ namespace Linq.Extension
             Expression e1 = null;
             object value = null;
             FilterInput[] fieldFilters = new FilterInput[] { };
-            var values = filterInput.Value.Split(',');
+            var values = filterInput.Value.Split(!string.IsNullOrWhiteSpace(filterInput.DelimiterListOfValues) 
+                ? filterInput.DelimiterListOfValues : ",");
             string val = string.Empty;
             foreach(string v in values)
             {
@@ -1775,8 +1778,9 @@ namespace Linq.Extension
         private static object GetListForInOperationFromValue(string value, PropertyInfo propertyInfo, ParameterExpression pe
             , out MethodInfo method
             , out Expression propertyExpression
-            , string delimiterFieldValues = ";")
+            , string delimiterFieldValues = ",")
         {
+            delimiterFieldValues = !string.IsNullOrWhiteSpace(delimiterFieldValues) ? delimiterFieldValues : ",";
             object l = null;
             method = null;
             Type t = propertyInfo.PropertyType.GetUnderlyingType();

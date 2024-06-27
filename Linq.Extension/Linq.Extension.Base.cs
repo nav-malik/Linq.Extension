@@ -10,6 +10,10 @@ namespace Linq.Extension.Filter
         public FilterLogicEnum Logic { get; set; }
         public string Value { get; set; }
         public string FieldName { get; set; }
+        /// <summary>
+        /// Provide Delimiter for Field Values, default is ",".
+        /// </summary>
+        public string DelimiterListOfValues { get; set; } = ",";
     }
 
     public class FilterGroupInput
