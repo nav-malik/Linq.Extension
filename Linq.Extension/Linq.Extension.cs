@@ -9,10 +9,15 @@ using Linq.Extension.Filter;
 using Linq.Extension.Pagination;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json;
-using System.ComponentModel.DataAnnotations.Schema;
 using System.Threading.Tasks;
 using Linq.Extension.Unique;
+using System.ComponentModel.DataAnnotations.Schema;
+#if NET6_0_OR_GREATER
 using Microsoft.EntityFrameworkCore;
+#elif NET48_OR_GREATER
+using System.Data.Entity;
+using Linq.Extension.CustomExtensionMethods;
+#endif
 using Linq.Extension.Grouping;
 
 namespace Linq.Extension
@@ -28,7 +33,7 @@ namespace Linq.Extension
 
         private static SearchInput CreateGroupSearch(List<GroupKeyNameValue> groupKeyNameValues)
         {
-            List<FilterInput> filters = new();
+            List<FilterInput> filters = new List<FilterInput>();
             foreach(var keyNameValue in groupKeyNameValues)
             {
                 filters.Add(new FilterInput
@@ -40,7 +45,7 @@ namespace Linq.Extension
                 });
             }
 
-            SearchInput search = new()
+            SearchInput search = new SearchInput()
             {
                 FilterGroups = new List<FilterGroupInput>
                 {
@@ -60,7 +65,7 @@ namespace Linq.Extension
         {
             var groupByOperationOn = GetGroupByOperationOn(parameters);
 
-            DistinctByInput distinctBy = new()
+            DistinctByInput distinctBy = new DistinctByInput()
             {
                 FieldNames = groupByOperationOn.GroupByFieldNames,
                 Pagination = groupByOperationOn.Pagination,
@@ -84,11 +89,11 @@ namespace Linq.Extension
             var listGroupByFields = DelimitedStringToList(groupByOperationOn.GroupByFieldNames,
                 delimiter: groupByOperationOn.DelimiterFieldNames);
 
-            List<GroupValuePair> listOfKeyValue = new();
+            List<GroupValuePair> listOfKeyValue = new List<GroupValuePair>();
 
             foreach(var key in keys)
             {
-                List<GroupKeyNameValue> groupKeyNameValues = new();
+                List<GroupKeyNameValue> groupKeyNameValues = new List<GroupKeyNameValue>();
                 foreach (var field in listGroupByFields)
                 {
                     groupKeyNameValues.Add(new GroupKeyNameValue 
@@ -294,14 +299,18 @@ namespace Linq.Extension
             {
                 if (!isAndLogic)
                 {
-                    first ??= Expression.Constant(false);
-                    second ??= Expression.Constant(false);
+                    if (first == null)
+                        first = Expression.Constant(false);
+                    if (second == null)
+                        second = Expression.Constant(false);
                     first = BinaryExpression.OrElse(first, second);
                 }
                 else
                 {
-                    first ??= Expression.Constant(true);
-                    second ??= Expression.Constant(true);
+                    if (first == null)
+                        first = Expression.Constant(true);
+                    if (second == null)
+                        second = Expression.Constant(true);
                     first = BinaryExpression.AndAlso(first, second);
                 }
             }
@@ -1083,7 +1092,7 @@ namespace Linq.Extension
         {
             if (string.IsNullOrWhiteSpace(delimitedString)) return null;
 
-            return delimitedString.Split(!string.IsNullOrWhiteSpace(delimiter) ? delimiter : ",").Select(x => x.Trim()).ToList();
+            return delimitedString.Split(!string.IsNullOrWhiteSpace(delimiter) ? Convert.ToChar(delimiter) : ',').Select(x => x.Trim()).ToList();
         }
 
         public static IDictionary<string, string> GetDictionaryOfFieldAndDelimitedStringValues<T>
@@ -1720,7 +1729,7 @@ namespace Linq.Extension
             object value = null;
             FilterInput[] fieldFilters = new FilterInput[] { };
             var values = filterInput.Value.Split(!string.IsNullOrWhiteSpace(filterInput.DelimiterListOfValues) 
-                ? filterInput.DelimiterListOfValues : ",");
+                ? Convert.ToChar(filterInput.DelimiterListOfValues) : ',');
             string val = string.Empty;
             foreach(string v in values)
             {
@@ -1791,25 +1800,25 @@ namespace Linq.Extension
 
             if (t.FullName.ToLower().Contains("int64"))
             {
-                l = value.Split(delimiterFieldValues).Select(Int64.Parse).ToList();
+                l = value.Split(Convert.ToChar(delimiterFieldValues)).Select(Int64.Parse).ToList();
 
             }
             else if (t.FullName.ToLower().Contains("int"))
             {
-                l = value.Split(delimiterFieldValues).Select(int.Parse).ToList();
+                l = value.Split(Convert.ToChar(delimiterFieldValues)).Select(int.Parse).ToList();
 
             }
             else if (t.FullName.ToLower().Contains("bool"))
             {
-                l = value.Split(delimiterFieldValues).Select(bool.Parse).ToList();
+                l = value.Split(Convert.ToChar(delimiterFieldValues)).Select(bool.Parse).ToList();
             }
             else if (t.FullName.ToLower().Contains("string"))
             {
-                l = value.Split(delimiterFieldValues).ToList();
+                l = value.Split(Convert.ToChar(delimiterFieldValues)).ToList();
             }
             else if (t.FullName.ToLower().Contains("date"))
             {
-                l = value.Split(delimiterFieldValues).Select(DateTime.Parse).ToList();
+                l = value.Split(Convert.ToChar(delimiterFieldValues)).Select(DateTime.Parse).ToList();
             }
 
             if (propertyInfo.PropertyType.FullName.ToLower().Contains("nullable"))
@@ -1958,6 +1967,7 @@ namespace Linq.Extension
                 );
             if (properties == null || properties.Count() < 1)
             {
+                //#if NET6_0_OR_GREATER
                 var fkAttribute = type.GetProperties()
                     .Where(p => exprFullMacth.IsMatch(p.Name) && p.GetCustomAttribute<ForeignKeyAttribute>() != null)
                     .Select(f => f.GetCustomAttribute<ForeignKeyAttribute>())
@@ -1974,6 +1984,7 @@ namespace Linq.Extension
 
                 }
                 else
+                //#endif
                 {
                     if (fetchParentEntityAlongWithParentlId)
                         properties = type.GetProperties()

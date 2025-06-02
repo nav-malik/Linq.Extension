@@ -1,7 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-	  <TargetFramework>net6.0</TargetFramework>
+	  <TargetFrameworks>net6.0; net8.0; net48; </TargetFrameworks>
+	  <LangVersion>latest</LangVersion>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -9,16 +10,28 @@
     <Copyright>Nav Malik</Copyright>
     <Description>Linq Extension to provide Dynamic Where Condition with Groups, Child Groups &amp; Filters and Dynamic Select, Dynamic Take If Positive Number, Pagination and Nesting Predicates with parenthesis. Use SearchInput class for Dynamic Where and PaginationInput for pagination (take, skip and sort).</Description>
     <PackageTags>Linq Extension DynamicSelect DynamicWhere Linq.Entities LinqEntity Linq.Entity Nesting Predicates NestingPredicates</PackageTags>
-    <Version>3.8.1</Version>
-    <PackageReleaseNotes>3.8.1 Added Delimiter for field values in FilterInput for list type of operation. Default value for delimiters will be comma (,) and these fields are string, so we can pass more than one character for delimiter, this is particularly helpful in field values as comma (,) can be in the values it self.</PackageReleaseNotes>
+    <Version>4.0.0</Version>
+    <PackageReleaseNotes>4.0.0 Added supoorted Frameworks Net6.0, Net8.0 and Framework 4.8. Also, added DistinctBy support for .Net Framework.</PackageReleaseNotes>
     <Title>Linq.Extension</Title>
     <RepositoryUrl>https://github.com/nav-malik/Linq.Extension</RepositoryUrl>
     <PackageProjectUrl>https://github.com/nav-malik/Linq.Extension</PackageProjectUrl>
-    
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="6.0.31" />
+        <None Include="README.md" Pack="true" PackagePath="\"/>
+    </ItemGroup>
+
+ <ItemGroup Condition="'$(TargetFramework)' == 'net6.0'">
+  <PackageReference Include="Microsoft.EntityFrameworkCore" Version="6.0.36" />
+ </ItemGroup>
+ <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+  <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.16" />
+ </ItemGroup> 
+ <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+  <PackageReference Include="EntityFramework" Version="6.5.1" />
+ </ItemGroup>
+  <ItemGroup>    
     <PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
   </ItemGroup>
 
