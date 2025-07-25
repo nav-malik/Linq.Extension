@@ -177,7 +177,7 @@ namespace Linq.Extension.Grouping
 
 namespace Linq.Extension.Aggregation
 {
-    public class GroupByAggregatiionInput
+    public class GroupByAggregationInput
     {
         /// <summary>
         /// List of strings for group by field names
