@@ -84,14 +84,10 @@ namespace Linq.Extension.Unique
     public class DistinctByInput
     {
         /// <summary>
-        /// Delimited separated field names.
+        /// List of strings containing field names.
         /// </summary>
-        public string FieldNames { get; set; }
-
-        /// <summary>
-        /// Provide Delimiter for Field Names, default is ",".
-        /// </summary>
-        public string DelimiterFieldNames { get; set; } = ",";
+        public List<string> FieldNames { get; set; }
+        
         /// <summary>
         /// Provide Delimiter for Field Values, default is ",".
         /// </summary>
@@ -114,14 +110,10 @@ namespace Linq.Extension.Grouping
     public class GroupByInput
     {
         /// <summary>
-        /// Delimited separated field names.
+        /// List of strings containing field names.
         /// </summary>
-        public string FieldNames { get; set; }
-
-        /// <summary>
-        /// Provide Delimiter for Field Names, default is ",".
-        /// </summary>
-        public string DelimiterFieldNames { get; set; } = ",";        
+        public List<string> FieldNames { get; set; }
+            
 
         /// <summary>
         /// Provide search object to filter data for GroupBy.
@@ -132,19 +124,15 @@ namespace Linq.Extension.Grouping
     public class GroupByOperationOnInput
     {
         /// <summary>
-        /// Delimited separated field names.
+        /// List of strings containing field names.
         /// </summary>
-        public string GroupByFieldNames { get; set; }
+        public List<string> GroupByFieldNames { get; set; }
 
         /// <summary>
         /// Single field name.
         /// </summary>
         public string OperationOnFieldName { get; set; }
-
-        /// <summary>
-        /// Provide Delimiter for Field Names, default is ",".
-        /// </summary>
-        public string DelimiterFieldNames { get; set; } = ",";
+               
         /// <summary>
         /// Provide Delimiter for Field Values, default is ",".
         /// </summary>
@@ -184,5 +172,56 @@ namespace Linq.Extension.Grouping
     {
         public string KeyName { get; set; }
         public string KeyValue {get; set;}
+    }
+}
+
+namespace Linq.Extension.Aggregation
+{
+    public class GroupByAggregatiionInput
+    {
+        /// <summary>
+        /// List of strings for group by field names
+        /// </summary>
+        /// 
+        public List<string> GroupByFieldNames { get; set; }
+
+        /// <summary>
+        /// Single field Name for aggregtion 
+        /// </summary>
+        /// 
+        public string AggregationFieldName { get; set; }
+
+
+        /// <summary>
+        /// Single field name for Aggregation Result, this will field will contain aggregated value.
+        /// </summary>
+        public string AggregationResultFieldName { get; set; }
+
+        /// <summary>
+        /// AggregationOperation can be COUNTDISTINCT, COUNT, SUM, MIN AND MAX, default is COUNTDISTINCT.
+        /// </summary>
+        /// 
+        public AggregationOperationType AggregationOperation { get; set; } = AggregationOperationType.COUNTDISTINCT;
+
+        /// <summary>
+        /// Provide search object to filter data for GroupBy
+        /// </summary>
+        /// 
+        public SearchInput Search { get; set; }
+    }
+
+    public enum AggregationOperationType
+    {
+        COUNTDISTINCT,
+        COUNT,
+        SUM,
+        MIN,
+        MAX
+    }
+
+    public class GroupAggregateValuePair
+    {
+        public string Group { get; set; }
+        public int AggregatedValue { get; set; }
     }
 }

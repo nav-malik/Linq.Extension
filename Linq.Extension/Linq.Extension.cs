@@ -70,31 +70,30 @@ namespace Linq.Extension
                 FieldNames = groupByOperationOn.GroupByFieldNames,
                 Pagination = groupByOperationOn.Pagination,
                 Search = groupByOperationOn.Search,
-                DelimiterFieldNames = groupByOperationOn.DelimiterFieldNames,
                 DelimiterFieldValues = groupByOperationOn.DelimiterFieldValues
             };
 
             var keys = entity
                 .GetEFCoreListDataFromDistinctBy(distinctBy);
 
+            List<string> lst = new List<string>();
+            lst.AddRange(groupByOperationOn.GroupByFieldNames);
+            lst.Add(groupByOperationOn.OperationOnFieldName);
+
             var data = source
                 .AsNoTracking()
-                .Where(keys, groupByOperationOn.GroupByFieldNames, delimiterFieldNames: groupByOperationOn.DelimiterFieldNames,
-                    delimiterFieldValues: groupByOperationOn.DelimiterFieldValues)
+                .Where(keys, groupByOperationOn.GroupByFieldNames, groupByOperationOn.DelimiterFieldValues)
                 .Where(parameters)
-                .DistinctBySelect(groupByOperationOn.GroupByFieldNames.Trim(',') + "," 
-                    + groupByOperationOn.OperationOnFieldName.Trim(','), delimiterFieldNames: groupByOperationOn.DelimiterFieldNames)
+                .DistinctBySelect(lst)
                 .ToList();
 
-            var listGroupByFields = DelimitedStringToList(groupByOperationOn.GroupByFieldNames,
-                delimiter: groupByOperationOn.DelimiterFieldNames);
 
             List<GroupValuePair> listOfKeyValue = new List<GroupValuePair>();
 
             foreach(var key in keys)
             {
                 List<GroupKeyNameValue> groupKeyNameValues = new List<GroupKeyNameValue>();
-                foreach (var field in listGroupByFields)
+                foreach (var field in groupByOperationOn.GroupByFieldNames)
                 {
                     groupKeyNameValues.Add(new GroupKeyNameValue 
                     {
@@ -246,8 +245,7 @@ namespace Linq.Extension
 
         public static IQueryable<IGrouping<T, T>> GroupBy<T>(this IQueryable<T> source, GroupByInput groupBy)
         {
-            var listFieldNames = DelimitedStringToList(groupBy.FieldNames, delimiter: groupBy.DelimiterFieldNames);
-            return source.Where(groupBy.Search).GroupBy(listFieldNames);
+            return source.Where(groupBy.Search).GroupBy(groupBy.FieldNames);
         }
 
         public static GroupByInput GetGroupBy(IDictionary<string, object> parameters)
@@ -415,7 +413,7 @@ namespace Linq.Extension
         }
 
         public static Expression DynamicWhereExpressionForLists<T>(IDictionary<string, string> parameters,
-            ParameterExpression pe, string delimiterFieldValues = ";")
+            ParameterExpression pe, string delimiterFieldValues = ",")
         {
             Expression combined = null;
             MethodInfo method = null;
@@ -458,7 +456,7 @@ namespace Linq.Extension
         }
 
         public static Expression<Func<T, bool>> DynamicWherePredicateForLists<T>(IDictionary<string, string> parameters
-            , string delimiterFieldValues = ";")
+            , string delimiterFieldValues = ",")
         {
             ParameterExpression pe = Expression.Parameter(typeof(T), "o");                  
 
@@ -475,9 +473,9 @@ namespace Linq.Extension
             var list = source.GetEFCoreListDataFromDistinctBy(distinctBy);
 
             IDictionary<string, string> parameters = GetDictionaryOfFieldAndDelimitedStringValues(list, distinctBy?.FieldNames,
-                delimiterFieldNames: distinctBy.DelimiterFieldNames, delimiterFieldValues: distinctBy.DelimiterFieldValues);
+                delimiterFieldValues: distinctBy.DelimiterFieldValues);
 
-            combined = DynamicWhereExpressionForLists<T>(parameters, pe);
+            combined = DynamicWhereExpressionForLists<T>(parameters, pe, distinctBy.DelimiterFieldValues);
 
             return combined;
         }
@@ -489,7 +487,7 @@ namespace Linq.Extension
             var distinctByData = source
                 .AsNoTracking()
                 .Where(distinctBy?.Search)
-                .DistinctBySelect(distinctBy?.FieldNames, delimiterFieldNames: distinctBy.DelimiterFieldNames)
+                .DistinctBySelect(distinctBy?.FieldNames)
                 .Pagination(distinctBy?.Pagination)
                 .ToList();
 
@@ -505,7 +503,7 @@ namespace Linq.Extension
             var list = source.GetEFCoreListDataFromDistinctBy(distinctBy, Ids, IdFieldName);
 
             IDictionary<string, string> parameters = GetDictionaryOfFieldAndDelimitedStringValues(list, distinctBy?.FieldNames,
-                delimiterFieldNames: distinctBy.DelimiterFieldNames, delimiterFieldValues: distinctBy.DelimiterFieldValues);
+                delimiterFieldValues: distinctBy.DelimiterFieldValues);
 
             combined = DynamicWhereExpressionForLists<T>(parameters, pe);
 
@@ -519,7 +517,7 @@ namespace Linq.Extension
             var distinctByData = source
                 .AsNoTracking()
                 .Where(distinctBy?.Search, Ids, IdFieldName)
-                .DistinctBySelect(distinctBy?.FieldNames, delimiterFieldNames: distinctBy.DelimiterFieldNames)
+                .DistinctBySelect(distinctBy?.FieldNames)
                 .Pagination(distinctBy?.Pagination)
                 .ToList();
 
@@ -610,10 +608,23 @@ namespace Linq.Extension
         }
 
         public static IQueryable<T> Where<T, TDistinctBy>(this IQueryable<T> source, List<TDistinctBy> list,
-            string fieldNames, string delimiterFieldNames = ";", string delimiterFieldValues = ";")
+            string fieldNames, string delimiterFieldNames = ",", string delimiterFieldValues = ",")
         {
             IDictionary<string, string> parameters = GetDictionaryOfFieldAndDelimitedStringValues(list, fieldNames,
                 delimiterFieldNames: delimiterFieldNames, delimiterFieldValues: delimiterFieldValues);
+            var selector = DynamicWherePredicateForLists<T>(parameters, delimiterFieldValues: delimiterFieldValues);
+
+            if (selector != null)
+                return source.Where(selector);
+            else
+                return source;
+        }
+
+        public static IQueryable<T> Where<T, TDistinctBy>(this IQueryable<T> source, List<TDistinctBy> list,
+            List<string> fieldNames, string delimiterFieldValues = ",")
+        {
+            IDictionary<string, string> parameters = GetDictionaryOfFieldAndDelimitedStringValues(list, fieldNames,
+                delimiterFieldValues: delimiterFieldValues);
             var selector = DynamicWherePredicateForLists<T>(parameters, delimiterFieldValues: delimiterFieldValues);
 
             if (selector != null)
@@ -680,7 +691,7 @@ namespace Linq.Extension
         }
 
         public static IQueryable<T> DistinctBySelect<T>(this IQueryable<T> source, string fieldsNames,
-            string delimiterFieldNames = ";")
+            string delimiterFieldNames = ",")
         {
             var selector = DynamicSelectGenerator<T>(fieldsNames, delimiter: delimiterFieldNames);
 
@@ -700,7 +711,7 @@ namespace Linq.Extension
         {
             if (distinctBy != null)
             {
-                var selector = DynamicSelectGenerator<T>(distinctBy.FieldNames, delimiter: distinctBy.DelimiterFieldNames);
+                var selector = DynamicSelectGenerator<T>(distinctBy.FieldNames);
 
                 if (selector != null)
                     return source.Select(selector).Distinct();
@@ -717,7 +728,7 @@ namespace Linq.Extension
         {
             if (distinctBy != null)
             {
-                var selector = DynamicSelectGenerator<T>(distinctBy.FieldNames, delimiter: distinctBy.DelimiterFieldNames);
+                var selector = DynamicSelectGenerator<T>(distinctBy.FieldNames);
 
                 if (selector != null)
                     return source.Where(distinctBy.Search).Select(selector).Distinct().Pagination(distinctBy.Pagination);
@@ -736,7 +747,7 @@ namespace Linq.Extension
         {
             if (distinctBy != null)
             {
-                var selector = DynamicSelectGenerator<T>(distinctBy.FieldNames, delimiter: distinctBy.DelimiterFieldNames);
+                var selector = DynamicSelectGenerator<T>(distinctBy.FieldNames);
 
                 if (selector != null)
                 {
@@ -1082,13 +1093,13 @@ namespace Linq.Extension
             return selector;
         }
         public static Expression<Func<T, T>> DynamicSelectGenerator<T>(string fieldsNames,
-            bool fetchParentEntityAlongWithParentlId = false, string delimiter = ";")
+            bool fetchParentEntityAlongWithParentlId = false, string delimiter = ",")
         {
             var listFieldNames = DelimitedStringToList(fieldsNames, delimiter: delimiter);
             return DynamicSelectGenerator<T>(listFieldNames, fetchParentEntityAlongWithParentlId);
         }
 
-        public static List<string> DelimitedStringToList(string delimitedString, string delimiter = ";")
+        public static List<string> DelimitedStringToList(string delimitedString, string delimiter = ",")
         {
             if (string.IsNullOrWhiteSpace(delimitedString)) return null;
 
@@ -1096,7 +1107,22 @@ namespace Linq.Extension
         }
 
         public static IDictionary<string, string> GetDictionaryOfFieldAndDelimitedStringValues<T>
-            (List<T> list, string fieldsNames, string delimiterFieldNames = ";", string delimiterFieldValues = ";")
+            (List<T> list, List<string> fieldsNames,  string delimiterFieldValues = ",")
+        {
+            Dictionary<string, string> dicFieldDelimitedValue = new Dictionary<string, string>();
+
+            if (list?.Count > 0 && fieldsNames?.Count > 0)
+            {
+                foreach (var field in fieldsNames)
+                {
+                    dicFieldDelimitedValue.Add(field, ConvertListOfValuesToDelimitedString(list, field,
+                        delimiterFieldValues: delimiterFieldValues));
+                }
+            }
+            return dicFieldDelimitedValue;
+        }
+        public static IDictionary<string, string> GetDictionaryOfFieldAndDelimitedStringValues<T>
+            (List<T> list, string fieldsNames, string delimiterFieldNames = ",", string delimiterFieldValues = ",")
         {
             Dictionary<string, string> dicFieldDelimitedValue = new Dictionary<string, string>();
             var lstFieldName = DelimitedStringToList(fieldsNames, delimiter: delimiterFieldNames);
@@ -1113,7 +1139,7 @@ namespace Linq.Extension
         }
 
         public static string ConvertListOfValuesToDelimitedString<T>(List<T> list, string columnName,
-            string delimiterFieldValues = ";")
+            string delimiterFieldValues = ",")
         {
             delimiterFieldValues = string.IsNullOrWhiteSpace(delimiterFieldValues) ? "," : delimiterFieldValues;
 

@@ -1,3 +1,7 @@
+
+4.5.0 Added GroupByAggregation, that will allow to perfom Count Distinct, Count, Sum, Min, and Max on a field other than in GroupBy field name list.
+Also, update the GroupByInput and DistinctByInput, instead of passing field names as delimated string now field names will be List of strings.
+
 4.0.0 Added supoorted Frameworks Net6.0, Net8.0 and Framework 4.8. Also, added new extension method DistinctBy for .Net Framework.
 
 3.8.1 Added Delimiter for field values in FilterInput for list type of operation. Default value for delimiters will be comma (,) and these fields are string, so we can pass more than one character for delimiter, this is particularly helpful in field values as comma (,) can be in the values it self.
