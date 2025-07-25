@@ -201,7 +201,7 @@ namespace Linq.Extension.Aggregation
         /// AggregationOperation can be COUNTDISTINCT, COUNT, SUM, MIN AND MAX, default is COUNTDISTINCT.
         /// </summary>
         /// 
-        public AggregationOperationType AggregationOperation { get; set; } = AggregationOperationType.COUNTDISTINCT;
+        public AggregationOperationEnum AggregationOperation { get; set; } = AggregationOperationEnum.COUNTDISTINCT;
 
         /// <summary>
         /// Provide search object to filter data for GroupBy
@@ -210,7 +210,7 @@ namespace Linq.Extension.Aggregation
         public SearchInput Search { get; set; }
     }
 
-    public enum AggregationOperationType
+    public enum AggregationOperationEnum
     {
         COUNTDISTINCT,
         COUNT,

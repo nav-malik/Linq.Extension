@@ -135,7 +135,7 @@ namespace Linq.Extension
             IEnumerable<string> groupByFieldNames,
             string aggregationFieldName,
             string aggregationResultFieldName,
-            AggregationOperationType aggregationOperation = AggregationOperationType.COUNTDISTINCT)
+            AggregationOperationEnum aggregationOperation = AggregationOperationEnum.COUNTDISTINCT)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
             if (groupByFieldNames == null || !groupByFieldNames.Any())
@@ -221,7 +221,7 @@ namespace Linq.Extension
 
             switch(aggregationOperation)
             {
-                case AggregationOperationType.COUNTDISTINCT:
+                case AggregationOperationEnum.COUNTDISTINCT:
                     var distinctMethod = typeof(Enumerable).GetMethods()
                         .Where(m => m.Name == "Distinct" && m.IsGenericMethodDefinition)
                         .Single(m => m.GetParameters().Length== 1 
@@ -236,27 +236,27 @@ namespace Linq.Extension
                         .MakeGenericMethod (aggregationFieldProp.PropertyType);
                     break;
 
-                case AggregationOperationType.COUNT:
+                case AggregationOperationEnum.COUNT:
                     aggregationMethod = typeof(Enumerable).GetMethods()
                         .Where(m => m.Name == "Count" && m.GetParameters().Length == 1)
                         .Single()
                         .MakeGenericMethod(aggregationFieldProp.PropertyType);
                     break;
-                case AggregationOperationType.SUM:
+                case AggregationOperationEnum.SUM:
                     aggregationMethod = typeof(Enumerable).GetMethods()
                         .Where(m => m.Name == "Sum" && m.GetParameters().Length == 1
                         && m.GetParameters()[0].ParameterType.IsGenericType
                         && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(IEnumerable<>))
                         .Single(m => m.GetParameters()[0].ParameterType.GetGenericArguments()[0] == aggregationFieldProp.PropertyType);
                     break;
-                case AggregationOperationType.MAX:
+                case AggregationOperationEnum.MAX:
                     aggregationMethod = typeof(Enumerable).GetMethods()
                         .Where(m => m.Name == "Max" && m.GetParameters().Length == 1
                         && m.GetParameters()[0].ParameterType.IsGenericType
                         && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(IEnumerable<>))
                         .Single(m => m.GetParameters()[0].ParameterType.GetGenericArguments()[0] == aggregationFieldProp.PropertyType);
                     break;
-                case AggregationOperationType.MIN:
+                case AggregationOperationEnum.MIN:
                     aggregationMethod = typeof(Enumerable).GetMethods()
                         .Where(m => m.Name == "Min" && m.GetParameters().Length == 1
                         && m.GetParameters()[0].ParameterType.IsGenericType
