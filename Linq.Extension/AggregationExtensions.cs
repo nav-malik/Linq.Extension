@@ -111,7 +111,7 @@ namespace Linq.Extension
             return finalQuery;
         }
         public static IQueryable<TSource> GroupByAggregation<TSource>(this IQueryable<TSource> source,
-            GroupByAggregatiionInput groupByAggregation)
+            GroupByAggregationInput groupByAggregation)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
             if (groupByAggregation == null) throw new ArgumentNullException(nameof(groupByAggregation));

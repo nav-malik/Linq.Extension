@@ -10,7 +10,7 @@
     <Copyright>Nav Malik</Copyright>
     <Description>Linq Extension to provide Dynamic Where Condition with Groups, Child Groups &amp; Filters and Dynamic Select, Dynamic Take If Positive Number, Pagination and Nesting Predicates with parenthesis. Use SearchInput class for Dynamic Where and PaginationInput for pagination (take, skip and sort). Also, provide DistinctBy, GroupBy, and GroupByAggregation.</Description>
     <PackageTags>Linq Extension DynamicSelect DynamicWhere Linq.Entities LinqEntity Linq.Entity Nesting Predicates NestingPredicates</PackageTags>
-    <Version>4.5.1</Version>
+    <Version>4.5.1.1</Version>
     <PackageReleaseNotes>4.5.1.0 Added support for Net 9.0.
 4.5.0 Added GroupByAggregation, that will allow to perfom Count Distinct, Count, Sum, Min, and Max on a field other than in GroupBy field name list.
 Also, update the GroupByInput and DistinctByInput, instead of passing field names as delimated string now field names will be List of strings.</PackageReleaseNotes>
