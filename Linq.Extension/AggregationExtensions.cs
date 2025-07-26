@@ -1,4 +1,5 @@
 ﻿using Linq.Extension.Aggregation;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,6 +11,26 @@ namespace Linq.Extension
 {
     public static class AggregationExtensions
     {
+        public static GroupByAggregationInput GetGroupByAggregation(IDictionary<string, object> parameters)
+        {
+            GroupByAggregationInput groupBy = null;
+
+            if (parameters != null && parameters.Count > 0)
+            {
+                foreach (var key in parameters.Keys)
+                    if (parameters[key] != null
+                        && (parameters[key]?.GetType()?.FullName == "GraphQL.Extension.Base.Aggregation.GroupByAggregationInput"
+                        || (bool)parameters[key]?.GetType()?.FullName.Contains("Aggregation.GroupByAggregationInput")
+                        || key == "aggregation"
+                        || parameters[key] is GroupByAggregationInput))
+                    {
+                        groupBy = JsonConvert.DeserializeObject<GroupByAggregationInput>(JsonConvert.SerializeObject(parameters[key]));
+                        break;
+                    }
+            }
+
+            return groupBy;
+        }
         private static IQueryable GroupByOnly<TSource>(this IQueryable<TSource> source,
            IEnumerable<string> groupByFieldNames)
         {
@@ -109,6 +130,13 @@ namespace Linq.Extension
             var finalQuery = (IQueryable)selectFinalMethod.Invoke(null, new object[] { groupedQuery, correctedResultSelector });
 
             return finalQuery;
+        }
+        public static IQueryable<TSource> GroupByAggregation<TSource>(this IQueryable<TSource> source, 
+            IDictionary<string, object> parameters)
+        {
+            var groupByAggregation = GetGroupByAggregation(parameters);
+
+            return source.GroupByAggregation(groupByAggregation);
         }
         public static IQueryable<TSource> GroupByAggregation<TSource>(this IQueryable<TSource> source,
             GroupByAggregationInput groupByAggregation)

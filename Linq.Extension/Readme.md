@@ -1,4 +1,7 @@
 
+4.5.3 Added GroupByAggregation with IDictionary<string, object> parameters.
+Also, added GetGroupByAggregation method to get Aggregation object from dictionary of objects.
+
 4.5.2 Update AggregationOperationType to AggregationOperationEnum
 
 4.5.1.0 Added support for Net 9.0.
