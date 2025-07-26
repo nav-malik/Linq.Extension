@@ -1,4 +1,6 @@
 
+4.6.0 Added GroupByAggregationEF6 methods for EF6 and .Net Framework support.
+
 4.5.3 Added GroupByAggregation with IDictionary<string, object> parameters.
 Also, added GetGroupByAggregation method to get Aggregation object from dictionary of objects.
 

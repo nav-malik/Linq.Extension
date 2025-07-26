@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-	  <TargetFrameworks>net8.0; net9.0; net48; </TargetFrameworks>
+	  <TargetFrameworks>net8.0; net9.0; net48;</TargetFrameworks>
 	  <LangVersion>latest</LangVersion>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
@@ -10,8 +10,9 @@
     <Copyright>Nav Malik</Copyright>
     <Description>Linq Extension to provide Dynamic Where Condition with Groups, Child Groups &amp; Filters and Dynamic Select, Dynamic Take If Positive Number, Pagination and Nesting Predicates with parenthesis. Use SearchInput class for Dynamic Where and PaginationInput for pagination (take, skip and sort). Also, provide DistinctBy, GroupBy, and GroupByAggregation.</Description>
     <PackageTags>Linq Extension DynamicSelect DynamicWhere Linq.Entities LinqEntity Linq.Entity Nesting Predicates NestingPredicates</PackageTags>
-    <Version>4.5.3</Version>
-    <PackageReleaseNotes>4.5.3 Added GroupByAggregation with IDictionary&lt;string, object&gt; parameters.
+    <Version>4.6.0</Version>
+    <PackageReleaseNotes>4.6.0 Added GroupByAggregationEF6 methods for EF6 and .Net Framework support.
+4.5.3 Added GroupByAggregation with IDictionary&lt;string, object&gt; parameters.
 Also, added GetGroupByAggregation method to get Aggregation object from dictionary of objects.
 4.5.0 Added GroupByAggregation, that will allow to perfom Count Distinct, Count, Sum, Min, and Max on a field other than in GroupBy field name list.
 Also, update the GroupByInput and DistinctByInput, instead of passing field names as delimated string now field names will be List of strings.</PackageReleaseNotes>
@@ -29,9 +30,27 @@ Also, update the GroupByInput and DistinctByInput, instead of passing field name
     <WarningLevel>8</WarningLevel>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net48|AnyCPU'">
+    <WarningLevel>0</WarningLevel>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net48|AnyCPU'">
+    <WarningLevel>0</WarningLevel>
+  </PropertyGroup>
+
   <ItemGroup>
         <None Include="README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
+
+	<PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
+		<DefineConstants>$(DefineConstants);NET8_0_OR_GREATER</DefineConstants>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(TargetFramework)' == 'net9.0'">
+		<DefineConstants>$(DefineConstants);NET9_0_OR_GREATER</DefineConstants>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(TargetFramework)' == 'net48'">
+		<DefineConstants>$(DefineConstants);NET48_OR_GREATER</DefineConstants>
+	</PropertyGroup>
 
  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
   <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.7" />
